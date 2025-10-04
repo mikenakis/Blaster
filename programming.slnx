@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="Blogger/Blogger.csproj" />
+  <Project Path="Common/Common.csproj" />
+  <Project Path="Scripting/Scripting.csproj" />
+</Solution>

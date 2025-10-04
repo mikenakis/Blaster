@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "Scripts": {
+      "commandName": "Project",
+      "workingDirectory": "$(ProjectDir)"
+    }
+  }
+}
