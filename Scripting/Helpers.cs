@@ -64,21 +64,23 @@ static class Helpers
 		} );
 	}
 
-	public static void LaunchHugoServer( string digitalGardenRelativeHugoFilesDirectory )
+	public static void LaunchHugoServer( string theme )
 	{
+		//NOTE: when a script is launched from within obsidian, the current directory is the directory of the script.
 		Sys.Console.WriteLine( $"Current directory: '{normalizePath( SysIo.Directory.GetCurrentDirectory() )}'" );
-		string hugoFilesDirectory = getFullPathFromDigitalGardenRelativePath( digitalGardenRelativeHugoFilesDirectory );
-		Sys.Console.WriteLine( $"Hugo files directory: '{hugoFilesDirectory}'" );
-		SysIo.Directory.SetCurrentDirectory( hugoFilesDirectory );
+		SysIo.Directory.SetCurrentDirectory( "../blog.michael.gr" ); //switch up to the obsidian directory, then down into the blog directory.
+		Sys.Console.WriteLine( $"Current directory: '{normalizePath( SysIo.Directory.GetCurrentDirectory() )}'" );
 		Sys.Console.WriteLine( $"Launching hugo..." );
 		Sys.Console.WriteLine();
 
-		exec( "hugo", "server --buildDrafts --cleanDestinationDir --buildFuture --navigateToChanged --panicOnWarning --disableFastRender" );
-		// --source michael.gr-hugo-files unnecessary because we launch in that directory
+		//exec( "hugo", @"server --buildDrafts --cleanDestinationDir --buildFuture --navigateToChanged --panicOnWarning --disableFastRender" );
+		exec( "hugo", "server --buildDrafts --cleanDestinationDir --buildFuture --navigateToChanged --panicOnWarning --disableFastRender" +
+			$@" --themesDir ..\..\..\hugo-themes --destination ..\..\..\michael.gr-hugo-publish --theme {theme} --source using-{theme}" +
+			// PEARL: the content directory is relative to the configuration file, even if the content directory is specified from the command-line.
+			@" --contentDir ..\content" );
 		// --minify TODO
 		// --printPathWarnings    cannot use because these warnings keep randomly popping up.
 		// --printUnusedTemplates cannot use because the stack theme issues such a warning.
-		// --disableFastRender
 	}
 
 	static int tryExec( string command, string arguments )

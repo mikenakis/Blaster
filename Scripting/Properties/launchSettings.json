@@ -2,7 +2,7 @@
   "profiles": {
     "Scripts": {
       "commandName": "Project",
-      "workingDirectory": "$(SolutionDir)../obsidian"
+      "workingDirectory": "$(SolutionDir)"
     }
   }
 }
