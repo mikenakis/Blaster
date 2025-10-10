@@ -1,6 +1,5 @@
 namespace Blogger;
 
-using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
@@ -118,6 +117,7 @@ class BloggerExportReader
 			ImmutableArray<string> categories = extractCategories( postEntity );
 			ImmutableArray<Comment> comments = extractComments( blogEntryEntities, postEntity["id"], "" );
 			fixImages( postEntity, albumDirectory, imageEntities, tasks );
+			fixImageLinks( postEntity );
 			string postTitle = postEntity["title"];
 			var postAuthor = new Author( postEntity["author-name"], postEntity["author-uri"], authorTypeFromString( postEntity["author-type"] ) );
 			Sys.DateTime postTimeCreated = Sys.DateTime.Parse( postEntity["created"] ).ToUniversalTime();
@@ -238,22 +238,36 @@ class BloggerExportReader
 		string content = postEntity["content"];
 		SysXmlLinq.XDocument document = SysXmlLinq.XDocument.Parse( content );
 		int imageNumber = 1;
+		Dictionary<SysXmlLinq.XElement, SysXmlLinq.XElement> elementsToReplace = new();
 		foreach( SysXmlLinq.XElement imageElement in document.Descendants( "img" ) )
 		{
 			Assert( !imageElement.HasElements );
 			Assert( imageElement.FirstNode == null );
 			Assert( imageElement.LastNode == null );
 			Assert( imageElement.Value == "" );
-			SysXmlLinq.XAttribute? sourceAttribute = imageElement.Attribute( "src" );
-			Assert( sourceAttribute != null );
-			Sys.Uri uri = new( sourceAttribute.Value );
-			Assert( uri.Scheme == "http" || uri.Scheme == "https" );
-			string imagePathName = getImage( uri, albumDirectory, postEntity["id"], imageNumber++, imageEntities, tasks );
+			Sys.Uri srcUri = new( imageElement.Attribute( "src" )!.Value );
+			Assert( srcUri.Scheme == "http" || srcUri.Scheme == "https" );
+
+			if( imageElement.Parent!.Name == "a" )
+			{
+				SysXmlLinq.XElement linkElement = imageElement.Parent!;
+				Assert( linkElement.FirstNode == imageElement );
+				Assert( linkElement.LastNode == imageElement );
+				Sys.Uri hrefUri = new( linkElement.Attribute( "href" )!.Value );
+				if( srcUri.Segments[^1].StartsWith( hrefUri.Segments[^1] ) )
+					srcUri = hrefUri;
+				if( srcUri.Segments[^1] == hrefUri.Segments[^1] )
+					elementsToReplace.Add( linkElement, imageElement );
+			}
+
+			string imagePathName = getImage( srcUri, albumDirectory, postEntity["id"], imageNumber++, imageEntities, tasks );
 			imageElement.SetAttributeValue( "src", imagePathName );
 			//SysXmlLinq.XAttribute? widthAttribute = imageElement.Attribute( "width" );
 			//SysXmlLinq.XAttribute? heightAttribute = imageElement.Attribute( "height" );
 			//SysXmlLinq.XAttribute? altAttribute = imageElement.Attribute( "alt" );
 		}
+		//foreach( (SysXmlLinq.XElement linkElement, SysXmlLinq.XElement imageElement) in elementsToReplace )
+		//	linkElement.ReplaceWith( imageElement );
 		postEntity["content"] = document.ToString();
 		return;
 
@@ -263,7 +277,10 @@ class BloggerExportReader
 			if( imageEntities.TryGetValue( key, out Entity? imageEntity ) )
 				return SysIo.Path.Combine( albumDirectory, imageEntity["imageFileName"] );
 
-			string filePathName = SysIo.Path.Combine( albumDirectory, "downloaded", fixFileName( $"{postId}{imageNumber}.jpg" ) );
+			string extension = SysIo.Path.GetExtension( key );
+			if( extension == "" )
+				extension = ".jpg";
+			string filePathName = SysIo.Path.Combine( albumDirectory, "downloaded", fixFileName( $"{postId}{imageNumber}{extension}" ) );
 			if( SysIo.File.Exists( filePathName ) )
 				return filePathName;
 
@@ -290,6 +307,23 @@ class BloggerExportReader
 				try
 				{
 					Sys.Console.WriteLine( $"BEGIN download '{uri}' as '{filePathName}'" );
+					byte[]? imageBytes = await download( uri );
+					if( imageBytes != null )
+					{
+						string directory = SysIo.Path.GetDirectoryName( filePathName )!;
+						SysIo.Directory.CreateDirectory( directory );
+						await SysIo.File.WriteAllBytesAsync( filePathName, imageBytes );
+					}
+					Sys.Console.WriteLine( $"END download '{uri}' as '{filePathName}'" );
+				}
+				catch( Sys.Exception exception )
+				{
+					Sys.Console.WriteLine( $"ERROR: {exception.GetType()}: \"{exception.Message}\"" );
+				}
+				return;
+
+				static async SysTasks.Task<byte[]?> download( Sys.Uri uri )
+				{
 					var handler = new SysNetHttp.HttpClientHandler();
 					handler.AllowAutoRedirect = false;
 					using( SysNetHttp.HttpClient client = new SysNetHttp.HttpClient( handler ) )
@@ -299,29 +333,36 @@ class BloggerExportReader
 						{
 							response = await client.GetAsync( uri ).ConfigureAwait( false );
 							if( response.StatusCode == SysNet.HttpStatusCode.OK )
-								break;
+								return await response.Content.ReadAsByteArrayAsync();
 							if( response.StatusCode == SysNet.HttpStatusCode.MovedPermanently ||
-								response.StatusCode == (SysNet.HttpStatusCode)302 )
+								response.StatusCode == SysNet.HttpStatusCode.Found )
 							{
 								uri = new( response.Headers.GetValues( "Location" ).First() );
 								continue;
 							}
 							Sys.Console.WriteLine( $"Not found: '{uri}'" );
-							break;
+							return null; //return Sys.Text.Encoding.UTF8.GetBytes( "<svg></svg>" );
 						}
-						byte[] imageBytes = await response.Content.ReadAsByteArrayAsync();
-						string directory = SysIo.Path.GetDirectoryName( filePathName )!;
-						SysIo.Directory.CreateDirectory( directory );
-						SysIo.File.WriteAllBytes( filePathName, imageBytes );
 					}
-					Sys.Console.WriteLine( $"END download '{uri}' as '{filePathName}'" );
-				}
-				catch( Sys.Exception exception )
-				{
-					Sys.Console.WriteLine( $"ERROR: {exception.GetType()}: \"{exception.Message}\"" );
 				}
 			}
 		}
+	}
+
+	static void fixImageLinks( Entity postEntity )
+	{
+		string content = postEntity["content"];
+		SysXmlLinq.XDocument document = SysXmlLinq.XDocument.Parse( content );
+		foreach( SysXmlLinq.XElement linkElement in document.Descendants( "a" ) )
+		{
+			if( !linkElement.HasElements )
+				continue;
+			//Assert( linkElement.FirstNode == null );
+			//Assert( linkElement.LastNode == null );
+			//Assert( linkElement.Value == "" );
+		}
+		postEntity["content"] = document.ToString();
+		return;
 	}
 
 	static void dumpBlogEntity( Entity entity, List<Entity> blogEntryEntities )

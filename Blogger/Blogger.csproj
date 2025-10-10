@@ -18,6 +18,9 @@
   <ItemGroup>
     <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
     <PackageReference Include="ReverseMarkdown" Version="4.7.0" />
+	  
+	<!-- This ridiculous package tries to convert html to markdown via repeated regex search and replace. Stay away from it. -->
+	<!-- PackageReference Include="Html2Markdown" /-->
   </ItemGroup>
 
   <ItemGroup>

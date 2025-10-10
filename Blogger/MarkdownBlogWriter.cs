@@ -1,5 +1,6 @@
 namespace Blogger;
 
+using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using Common;
@@ -20,20 +21,7 @@ class MarkdownBlogWriter
 
 		var template = Template.Create( SysIo.File.ReadAllText( "PostTemplate.md" ) );
 		var utf8Bomless = new SysText.UTF8Encoding( false );
-		var reverseMarkdownConfig = new ReverseMarkdown.Config();
-		reverseMarkdownConfig.CleanupUnnecessarySpaces = true; //default = true
-		reverseMarkdownConfig.DefaultCodeBlockLanguage = "CSharp"; //default = null
-		reverseMarkdownConfig.GithubFlavored = false; //default = false
-		reverseMarkdownConfig.PassThroughTags = ["Style"]; //default = {}
-		reverseMarkdownConfig.RemoveComments = false; //default = false
-		reverseMarkdownConfig.SlackFlavored = false; //default = false
-		reverseMarkdownConfig.SmartHrefHandling = false; //default = false
-		reverseMarkdownConfig.SuppressDivNewlines = false; //default = false
-		reverseMarkdownConfig.TableHeaderColumnSpanHandling = true; //default = true
-		reverseMarkdownConfig.TableWithoutHeaderRowHandling = ReverseMarkdown.Config.TableWithoutHeaderRowHandlingOption.Default; // default = Default
-		reverseMarkdownConfig.UnknownTags = ReverseMarkdown.Config.UnknownTagsOption.PassThrough;
-		reverseMarkdownConfig.WhitelistUriSchemes = [];  //default = {}
-		var reverseMarkdownConverter = new ReverseMarkdown.Converter( reverseMarkdownConfig );
+		var markdownFromHtmlConverter = new MarkdownFromHtmlConverter();
 		foreach( Post post in blog.Posts.Sort( ( a, b ) => a.Filename.CompareTo( b.Filename ) ) )
 		{
 			Sys.Console.WriteLine( post.Title );
@@ -52,7 +40,7 @@ class MarkdownBlogWriter
 			template["image"] = ""; //TODO
 			string content = fixPostContent( post.Content );
 			content = copyImages( content, postDirectoryName );
-			content = reverseMarkdownConverter.Convert( content );
+			content = markdownFromHtmlConverter.Convert( content );
 			template["content"] = content;
 			template["comments"] = stringFromComments( template, post.Comments );
 			string text = template.GenerateText();
@@ -83,6 +71,7 @@ class MarkdownBlogWriter
 		static string copyImages( string content, string postDirectoryName )
 		{
 			SysXmlLinq.XDocument document = SysXmlLinq.XDocument.Parse( content );
+			List<SysXmlLinq.XElement> elementsToRemove = new();
 			foreach( SysXmlLinq.XElement imageElement in document.Descendants( "img" ) )
 			{
 				Assert( !imageElement.HasElements );
@@ -91,12 +80,19 @@ class MarkdownBlogWriter
 				Assert( imageElement.Value == "" );
 				SysXmlLinq.XAttribute? sourceAttribute = imageElement.Attribute( "src" );
 				Assert( sourceAttribute != null );
+				if( !SysIo.File.Exists( sourceAttribute.Value ) )
+				{
+					elementsToRemove.Add( imageElement );
+					continue;
+				}
 				string fileName = copyImage( sourceAttribute.Value, postDirectoryName );
 				imageElement.SetAttributeValue( "src", fileName );
 				//SysXmlLinq.XAttribute? widthAttribute = imageElement.Attribute( "width" );
 				//SysXmlLinq.XAttribute? heightAttribute = imageElement.Attribute( "height" );
 				//SysXmlLinq.XAttribute? altAttribute = imageElement.Attribute( "alt" );
 			}
+			foreach( SysXmlLinq.XElement elementToRemove in elementsToRemove )
+				elementToRemove.Remove();
 			return document.ToString();
 
 			static string copyImage( string sourceFilePathName, string postDirectoryName )
