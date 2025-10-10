@@ -1,11 +1,19 @@
 namespace Blogger;
 
+using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
+using static System.Threading.Tasks.TaskExtensions;
 using static Common.Statics;
+using NewtonsoftJsonLinq = Newtonsoft.Json.Linq;
+using Regex = System.Text.RegularExpressions;
 using Sys = System;
 using SysIo = System.IO;
+using SysNet = System.Net;
+using SysNetHttp = System.Net.Http;
+using SysTasks = System.Threading.Tasks;
+using SysWeb = System.Web;
 using SysXmlLinq = System.Xml.Linq;
 
 class BloggerExportReader
@@ -21,10 +29,48 @@ class BloggerExportReader
 		(Entity blogEntity, List<Entity> blogEntryEntities) = blogEntityFromXDocument( document );
 		if( False )
 			dumpBlogEntity( blogEntity, blogEntryEntities );
-		Blog blog = blogFromBlogEntity( blogEntity, blogEntryEntities );
+		string albumDirectory = SysIo.Path.GetFullPath( SysIo.Path.Combine( bloggerExportDirectory, "Albums", blogName ) );
+		IReadOnlyDictionary<string, Entity> imageEntities = getImageEntities( albumDirectory );
+		Blog blog = blogFromBlogEntity( blogEntity, blogEntryEntities, albumDirectory, imageEntities );
 		if( False )
 			blog.Dump();
 		return blog;
+	}
+
+	static IReadOnlyDictionary<string, Entity> getImageEntities( string albumDirectory )
+	{
+		Dictionary<string, Entity> entities = new();
+		foreach( string jsonFilePathName in SysIo.Directory.EnumerateFiles( albumDirectory, "*.json" ) )
+		{
+			if( jsonFilePathName.EndsWith( "metadata.json" ) )
+				continue;
+			NewtonsoftJsonLinq.JObject data = NewtonsoftJsonLinq.JObject.Parse( SysIo.File.ReadAllText( jsonFilePathName ) );
+			string imageFileName = SysIo.Path.GetFileNameWithoutExtension( jsonFilePathName );
+			Regex.Match match = Regex.Regex.Match( imageFileName, "\\(\\d+\\)$" );
+			if( match.Success )
+			{
+				Assert( match.Captures.Count == 1 && match.Groups.Count == 1 );
+				imageFileName = imageFileName[..match.Index];
+			}
+			if( !SysIo.File.Exists( SysIo.Path.Combine( albumDirectory, imageFileName ) ) )
+			{
+				Sys.Console.WriteLine( $"image does not exist: {imageFileName}" );
+				continue;
+			}
+			string key = data["filename"]!.ToString();
+			if( entities.ContainsKey( key ) )
+			{
+				Sys.Console.WriteLine( $"duplicate image entity: {key}" );
+				continue;
+			}
+			Entity entity = new Entity();
+			entity.Add( "key", key );
+			entity.Add( "imageFileName", imageFileName );
+			foreach( string jsonPropertyName in new string[] { "uploadStatus", "sizeBytes", "creationTimestampMs", "hasOriginalBytes", "contentVersion", "mimeType" } )
+				entity.Add( jsonPropertyName, data[jsonPropertyName]!.ToString() );
+			entities.Add( key, entity );
+		}
+		return entities;
 	}
 
 	class Entity
@@ -52,8 +98,9 @@ class BloggerExportReader
 		}
 	}
 
-	static Blog blogFromBlogEntity( Entity blogEntity, List<Entity> blogEntryEntities )
+	static Blog blogFromBlogEntity( Entity blogEntity, List<Entity> blogEntryEntities, string albumDirectory, IReadOnlyDictionary<string, Entity> imageEntities )
 	{
+		List<SysTasks.Task> tasks = new();
 		Dictionary<Entity, Post> entityToPostMap = new();
 		Dictionary<Entity, Comment> entityToCommentMap = new();
 		ImmutableArray<Entity> postEntities = blogEntryEntities.Where( entry => entry["type"] == "POST" ).ToImmutableArray();
@@ -63,24 +110,26 @@ class BloggerExportReader
 		foreach( Entity postEntity in postEntities )
 		{
 			string status = postEntity["status"];
-			AuthorType authorType = authorTypeFromString( postEntity["author-type"] );
-			Author author = new Author( postEntity["author-name"], postEntity["author-uri"], authorType );
-			Sys.DateTime timeCreated = Sys.DateTime.Parse( postEntity["created"] ).ToUniversalTime();
-			Sys.DateTime timePublished = Sys.DateTime.Parse( postEntity["published"] ).ToUniversalTime();
-			Sys.DateTime timeUpdated = Sys.DateTime.Parse( postEntity["updated"] ).ToUniversalTime();
 			//Assert( postEntity["trashed"] == "" ); //"trashed" is the time of trashing
-			string content = postEntity["content"];
-			string title = postEntity["title"];
 			//Assert( postEntity["location"] == "" ); //there is one blog post with location information, and it is in Palo Alto, CA, so it is meaningless and can safely be ignored.
-			ImmutableArray<string> categories = extractCategories( postEntity );
-			string filename = postEntity["filename"];
 			Assert( postEntity["link"] == "" );
 			Assert( postEntity["metaDescription"] == "" );
 			Assert( postEntity["enclosure"] == "" );
+			ImmutableArray<string> categories = extractCategories( postEntity );
 			ImmutableArray<Comment> comments = extractComments( blogEntryEntities, postEntity["id"], "" );
-			Post post = new Post( postStatusFromString( status ), filename, title, author, timeCreated, timePublished, timeUpdated, content, categories, comments );
+			fixImages( postEntity, albumDirectory, imageEntities, tasks );
+			string postTitle = postEntity["title"];
+			var postAuthor = new Author( postEntity["author-name"], postEntity["author-uri"], authorTypeFromString( postEntity["author-type"] ) );
+			Sys.DateTime postTimeCreated = Sys.DateTime.Parse( postEntity["created"] ).ToUniversalTime();
+			Sys.DateTime postTimePublished = Sys.DateTime.Parse( postEntity["published"] ).ToUniversalTime();
+			Sys.DateTime postTimeUpdated = Sys.DateTime.Parse( postEntity["updated"] ).ToUniversalTime();
+			string postContent = postEntity["content"];
+			string postFileName = fixPostFileName( postEntity["filename"], postTimeCreated, postTitle );
+			Post post = new Post( postStatusFromString( status ), postFileName, postTitle, postAuthor, //
+				postTimeCreated, postTimePublished, postTimeUpdated, postContent, categories, comments );
 			posts.Add( post );
 		}
+		SysTasks.Task.WhenAll( tasks );
 		Assert( blogEntryEntities.Count == 0 );
 		return new Blog( blogEntity["title"], posts.ToImmutableArray() );
 
@@ -95,6 +144,13 @@ class BloggerExportReader
 			foreach( Entity commentEntity in commentEntities )
 				blogEntryEntities.Remove( commentEntity );
 			return commentEntities.Select( commentEntity => commentFromCommentEntity( blogEntryEntities, commentEntity, postId, inReplyTo ) ).ToImmutableArray();
+		}
+
+		static string fixPostFileName( string fileName, Sys.DateTime timeCreated, string title )
+		{
+			if( fileName == "" )
+				fileName = $"/{timeCreated.Year:D2}/{timeCreated.Month:D2}/{title}.html";
+			return fileName;
 		}
 
 		static Comment commentFromCommentEntity( List<Entity> blogEntryEntities, Entity commentEntity, string postId, string inReplyTo )
@@ -140,7 +196,6 @@ class BloggerExportReader
 		{
 			return status switch
 			{
-				//"DRAFT" => CommentStatus.Draft,
 				"LIVE" => CommentStatus.Live,
 				"SPAM_COMMENT" => CommentStatus.Spam,
 				"GHOSTED_COMMENT" => CommentStatus.Ghosted,
@@ -156,6 +211,116 @@ class BloggerExportReader
 				"ANONYMOUS" => AuthorType.Anonymous,
 				_ => throw new Sys.Exception()
 			};
+		}
+	}
+
+	static string fixHtmlContent( string content )
+	{
+		if( content.StartsWith( "<p>So, for some time now, whenever" ) || content.StartsWith( "<p>Solon's original phrase was" ) )
+			content += "</p>";
+		else if( content.Contains( "preload=\"none\"\n    controls\n" ) )
+			content = content.Replace( "preload=\"none\"\n    controls\n", "preload=\"none\"\n" );
+		content = content.Replace( "<o:p>", "<p>" );
+		content = content.Replace( "</o:p>", "</p>" );
+
+		content = "<!DOCTYPE html PUBLIC " +
+			"\"-//W3C//DTD XHTML 1.0 Transitional//EN\" \"http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd\"" +
+			"[" +
+			"<!ENTITY nbsp \"&#160;\">" +
+			"]>" +
+			$"<html><head></head><body>" + content + "</body></html>";
+
+		return content;
+	}
+
+	static void fixImages( Entity postEntity, string albumDirectory, IReadOnlyDictionary<string, Entity> imageEntities, List<SysTasks.Task> tasks )
+	{
+		string content = postEntity["content"];
+		SysXmlLinq.XDocument document = SysXmlLinq.XDocument.Parse( content );
+		int imageNumber = 1;
+		foreach( SysXmlLinq.XElement imageElement in document.Descendants( "img" ) )
+		{
+			Assert( !imageElement.HasElements );
+			Assert( imageElement.FirstNode == null );
+			Assert( imageElement.LastNode == null );
+			Assert( imageElement.Value == "" );
+			SysXmlLinq.XAttribute? sourceAttribute = imageElement.Attribute( "src" );
+			Assert( sourceAttribute != null );
+			Sys.Uri uri = new( sourceAttribute.Value );
+			Assert( uri.Scheme == "http" || uri.Scheme == "https" );
+			string imagePathName = getImage( uri, albumDirectory, postEntity["id"], imageNumber++, imageEntities, tasks );
+			imageElement.SetAttributeValue( "src", imagePathName );
+			//SysXmlLinq.XAttribute? widthAttribute = imageElement.Attribute( "width" );
+			//SysXmlLinq.XAttribute? heightAttribute = imageElement.Attribute( "height" );
+			//SysXmlLinq.XAttribute? altAttribute = imageElement.Attribute( "alt" );
+		}
+		postEntity["content"] = document.ToString();
+		return;
+
+		static string getImage( Sys.Uri uri, string albumDirectory, string postId, int imageNumber, IReadOnlyDictionary<string, Entity> imageEntities, List<SysTasks.Task> tasks )
+		{
+			string key = decode( uri.Segments[^1] );
+			if( imageEntities.TryGetValue( key, out Entity? imageEntity ) )
+				return SysIo.Path.Combine( albumDirectory, imageEntity["imageFileName"] );
+
+			string filePathName = SysIo.Path.Combine( albumDirectory, "downloaded", fixFileName( $"{postId}{imageNumber}.jpg" ) );
+			if( SysIo.File.Exists( filePathName ) )
+				return filePathName;
+
+			Sys.Console.WriteLine( $"image not found locally: '{uri}'" );
+			SysTasks.Task task = SysTasks.Task.Run( () => download( uri, filePathName ) );
+			tasks.Add( task );
+			return filePathName;
+
+			static string decode( string s )
+			{
+				return SysWeb.HttpUtility.UrlDecode( s );
+			}
+
+			static string fixFileName( string fileName )
+			{
+				string invalidCharacters = "<>:\"/\\|?*";
+				foreach( char c in invalidCharacters )
+					fileName = fileName.Replace( c, '-' );
+				return fileName;
+			}
+
+			static async SysTasks.Task download( Sys.Uri uri, string filePathName )
+			{
+				try
+				{
+					Sys.Console.WriteLine( $"BEGIN download '{uri}' as '{filePathName}'" );
+					var handler = new SysNetHttp.HttpClientHandler();
+					handler.AllowAutoRedirect = false;
+					using( SysNetHttp.HttpClient client = new SysNetHttp.HttpClient( handler ) )
+					{
+						SysNetHttp.HttpResponseMessage response;
+						for(; ; )
+						{
+							response = await client.GetAsync( uri ).ConfigureAwait( false );
+							if( response.StatusCode == SysNet.HttpStatusCode.OK )
+								break;
+							if( response.StatusCode == SysNet.HttpStatusCode.MovedPermanently ||
+								response.StatusCode == (SysNet.HttpStatusCode)302 )
+							{
+								uri = new( response.Headers.GetValues( "Location" ).First() );
+								continue;
+							}
+							Sys.Console.WriteLine( $"Not found: '{uri}'" );
+							break;
+						}
+						byte[] imageBytes = await response.Content.ReadAsByteArrayAsync();
+						string directory = SysIo.Path.GetDirectoryName( filePathName )!;
+						SysIo.Directory.CreateDirectory( directory );
+						SysIo.File.WriteAllBytes( filePathName, imageBytes );
+					}
+					Sys.Console.WriteLine( $"END download '{uri}' as '{filePathName}'" );
+				}
+				catch( Sys.Exception exception )
+				{
+					Sys.Console.WriteLine( $"ERROR: {exception.GetType()}: \"{exception.Message}\"" );
+				}
+			}
 		}
 	}
 
@@ -253,7 +418,7 @@ class BloggerExportReader
 			entity.Add( "published", extractElement( element, "published" ).Value );
 			entity.Add( "updated", extractElement( element, "updated" ).Value );
 			entity.Add( "trashed", extractElement( element, "trashed" ).Value );
-			entity.Add( "content", extractElement( element, "content" ).Value );
+			entity.Add( "content", fixHtmlContent( extractElement( element, "content" ).Value ) );
 			entity.Add( "title", extractElement( element, "title" ).Value );
 			entity.Add( "metaDescription", extractElement( element, "metaDescription" ).Value );
 			entity.Add( "location", extractElement( element, "location" ).Value );

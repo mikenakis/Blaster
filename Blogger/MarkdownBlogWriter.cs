@@ -8,28 +8,37 @@ using Sys = System;
 using SysGlob = System.Globalization;
 using SysIo = System.IO;
 using SysText = System.Text;
+using SysXmlLinq = System.Xml.Linq;
 
 class MarkdownBlogWriter
 {
 	public static void WriteBlog( Blog blog, string blogDirectory )
 	{
-		writeBlog( blog, blogDirectory );
-	}
+		if( SysIo.Directory.Exists( blogDirectory ) )
+			SysIo.Directory.Delete( blogDirectory, true );
+		SysIo.Directory.CreateDirectory( blogDirectory );
 
-	static void writeBlog( Blog blog, string blogDirectory )
-	{
 		var template = Template.Create( SysIo.File.ReadAllText( "PostTemplate.md" ) );
 		var utf8Bomless = new SysText.UTF8Encoding( false );
 		var reverseMarkdownConfig = new ReverseMarkdown.Config();
-		reverseMarkdownConfig.CleanupUnnecessarySpaces = true;
-		reverseMarkdownConfig.DefaultCodeBlockLanguage = "CSharp";
-		reverseMarkdownConfig.GithubFlavored = true;
-		reverseMarkdownConfig.PassThroughTags = ["Style"];
+		reverseMarkdownConfig.CleanupUnnecessarySpaces = true; //default = true
+		reverseMarkdownConfig.DefaultCodeBlockLanguage = "CSharp"; //default = null
+		reverseMarkdownConfig.GithubFlavored = false; //default = false
+		reverseMarkdownConfig.PassThroughTags = ["Style"]; //default = {}
+		reverseMarkdownConfig.RemoveComments = false; //default = false
+		reverseMarkdownConfig.SlackFlavored = false; //default = false
+		reverseMarkdownConfig.SmartHrefHandling = false; //default = false
+		reverseMarkdownConfig.SuppressDivNewlines = false; //default = false
+		reverseMarkdownConfig.TableHeaderColumnSpanHandling = true; //default = true
+		reverseMarkdownConfig.TableWithoutHeaderRowHandling = ReverseMarkdown.Config.TableWithoutHeaderRowHandlingOption.Default; // default = Default
 		reverseMarkdownConfig.UnknownTags = ReverseMarkdown.Config.UnknownTagsOption.PassThrough;
+		reverseMarkdownConfig.WhitelistUriSchemes = [];  //default = {}
 		var reverseMarkdownConverter = new ReverseMarkdown.Converter( reverseMarkdownConfig );
-		foreach( Post post in blog.Posts )
+		foreach( Post post in blog.Posts.Sort( ( a, b ) => a.Filename.CompareTo( b.Filename ) ) )
 		{
 			Sys.Console.WriteLine( post.Title );
+			string postDirectoryName = getPostDirectoryName( blogDirectory, post );
+			SysIo.Directory.CreateDirectory( postDirectoryName );
 			template["title"] = escapeForYaml( fixForHugo( post.Title ) );
 			template["description"] = ""; //post.Description;
 			template["time-created"] = post.TimeCreated.ToString( @"yyyy-MM-ddTHH:mm:ss.fffZ", SysGlob.CultureInfo.InvariantCulture );
@@ -41,30 +50,67 @@ class MarkdownBlogWriter
 			foreach( string category in post.Categories )
 				template["tags"] += tagTemplate.GenerateText( ("name", fixTag( category )) );
 			template["image"] = ""; //TODO
-			template["content"] = reverseMarkdownConverter.Convert( fix( post.Content ) );
+			string content = fixPostContent( post.Content );
+			content = copyImages( content, postDirectoryName );
+			content = reverseMarkdownConverter.Convert( content );
+			template["content"] = content;
 			template["comments"] = stringFromComments( template, post.Comments );
 			string text = template.GenerateText();
-			string bloggerPostFileName = post.Filename;
-			if( bloggerPostFileName == "" )
-				bloggerPostFileName = $"/{post.TimeCreated.Year:D2}/{post.TimeCreated.Month:D2}/{post.Title}.html";
-			Assert( bloggerPostFileName[0] == '/' );
-			bloggerPostFileName = bloggerPostFileName[1..];
-			string postYearAndMonth = SysIo.Path.GetDirectoryName( bloggerPostFileName ) ?? throw new Sys.Exception();
-			string postSlug = filenameFrom( SysIo.Path.GetFileName( bloggerPostFileName ) );
-			string postRelativeDirectoryName = SysIo.Path.Combine( postYearAndMonth, postSlug );
-			string postDirectoryName = SysIo.Path.GetFullPath( SysIo.Path.Combine( blogDirectory, "b", postRelativeDirectoryName ) );
-			Assert( postDirectoryName.StartsWith( blogDirectory ) );
-			SysIo.Directory.CreateDirectory( postDirectoryName );
 			string postPathName = SysIo.Path.GetFullPath( SysIo.Path.Combine( postDirectoryName, "index.md" ) );
 			SysIo.File.WriteAllText( postPathName, text.Replace( "\r\n", "\n" ).Replace( "\n", "\r\n" ), utf8Bomless );
 		}
 		return;
 
-		static string fix( string content )
+		static string getPostDirectoryName( string blogDirectory, Post post )
+		{
+			Assert( post.Filename[0] == '/' );
+			string bloggerPostFileName = post.Filename[1..];
+			string postYearAndMonth = SysIo.Path.GetDirectoryName( bloggerPostFileName ) ?? throw new Sys.Exception();
+			string postSlug = filenameFrom( SysIo.Path.GetFileName( bloggerPostFileName ) );
+			string postRelativeDirectoryName = SysIo.Path.Combine( postYearAndMonth, postSlug );
+			string postDirectoryName = SysIo.Path.GetFullPath( SysIo.Path.Combine( blogDirectory, postRelativeDirectoryName ) );
+			Assert( postDirectoryName.StartsWith( blogDirectory ) );
+			return postDirectoryName;
+		}
+
+		static string fixPostContent( string content )
 		{
 			//PEARL: get rid of square brackets inside link text to work around what appears to be a ridiculous bug of Hugo
 			content = content.Replace( "Is my mentor's concern for code quality excessive? [closed]", "Is my mentor's concern for code quality excessive? (closed)" );
 			return content;
+		}
+
+		static string copyImages( string content, string postDirectoryName )
+		{
+			SysXmlLinq.XDocument document = SysXmlLinq.XDocument.Parse( content );
+			foreach( SysXmlLinq.XElement imageElement in document.Descendants( "img" ) )
+			{
+				Assert( !imageElement.HasElements );
+				Assert( imageElement.FirstNode == null );
+				Assert( imageElement.LastNode == null );
+				Assert( imageElement.Value == "" );
+				SysXmlLinq.XAttribute? sourceAttribute = imageElement.Attribute( "src" );
+				Assert( sourceAttribute != null );
+				string fileName = copyImage( sourceAttribute.Value, postDirectoryName );
+				imageElement.SetAttributeValue( "src", fileName );
+				//SysXmlLinq.XAttribute? widthAttribute = imageElement.Attribute( "width" );
+				//SysXmlLinq.XAttribute? heightAttribute = imageElement.Attribute( "height" );
+				//SysXmlLinq.XAttribute? altAttribute = imageElement.Attribute( "alt" );
+			}
+			return document.ToString();
+
+			static string copyImage( string sourceFilePathName, string postDirectoryName )
+			{
+				string fileName = fixFileName( SysIo.Path.GetFileName( sourceFilePathName ) );
+				string targetFilePathName = SysIo.Path.Combine( postDirectoryName, fileName );
+				SysIo.File.Copy( sourceFilePathName, targetFilePathName, true );
+				return fileName;
+
+				static string fixFileName( string fileName )
+				{
+					return fileName.Replace( ' ', '-' );
+				}
+			}
 		}
 
 		static string stringFromComments( Template template, ImmutableArray<Comment> comments )
