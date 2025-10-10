@@ -25,8 +25,8 @@ class MarkdownBlogWriter
 		foreach( Post post in blog.Posts.Sort( ( a, b ) => a.Filename.CompareTo( b.Filename ) ) )
 		{
 			Sys.Console.WriteLine( post.Title );
-			string postDirectoryName = getPostDirectoryName( blogDirectory, post );
-			SysIo.Directory.CreateDirectory( postDirectoryName );
+			string postDirectoryPathName = getPostDirectoryPathName( blogDirectory, post );
+			SysIo.Directory.CreateDirectory( postDirectoryPathName );
 			template["title"] = escapeForYaml( fixForHugo( post.Title ) );
 			template["description"] = ""; //post.Description;
 			template["time-created"] = post.TimeCreated.ToString( @"yyyy-MM-ddTHH:mm:ss.fffZ", SysGlob.CultureInfo.InvariantCulture );
@@ -39,17 +39,17 @@ class MarkdownBlogWriter
 				template["tags"] += tagTemplate.GenerateText( ("name", fixTag( category )) );
 			template["image"] = ""; //TODO
 			string content = fixPostContent( post.Content );
-			content = copyImages( content, postDirectoryName );
+			content = copyImages( content, postDirectoryPathName, "images" );
 			content = markdownFromHtmlConverter.Convert( content );
 			template["content"] = content;
 			template["comments"] = stringFromComments( template, post.Comments );
 			string text = template.GenerateText();
-			string postPathName = SysIo.Path.GetFullPath( SysIo.Path.Combine( postDirectoryName, "index.md" ) );
+			string postPathName = SysIo.Path.GetFullPath( SysIo.Path.Combine( postDirectoryPathName, "index.md" ) );
 			SysIo.File.WriteAllText( postPathName, text.Replace( "\r\n", "\n" ).Replace( "\n", "\r\n" ), utf8Bomless );
 		}
 		return;
 
-		static string getPostDirectoryName( string blogDirectory, Post post )
+		static string getPostDirectoryPathName( string blogDirectory, Post post )
 		{
 			Assert( post.Filename[0] == '/' );
 			string bloggerPostFileName = post.Filename[1..];
@@ -68,7 +68,7 @@ class MarkdownBlogWriter
 			return content;
 		}
 
-		static string copyImages( string content, string postDirectoryName )
+		static string copyImages( string content, string postDirectoryName, string imagesDirectoryName )
 		{
 			SysXmlLinq.XDocument document = SysXmlLinq.XDocument.Parse( content );
 			List<SysXmlLinq.XElement> elementsToRemove = new();
@@ -85,7 +85,7 @@ class MarkdownBlogWriter
 					elementsToRemove.Add( imageElement );
 					continue;
 				}
-				string fileName = copyImage( sourceAttribute.Value, postDirectoryName );
+				string fileName = copyImage( sourceAttribute.Value, postDirectoryName, imagesDirectoryName );
 				imageElement.SetAttributeValue( "src", fileName );
 				//SysXmlLinq.XAttribute? widthAttribute = imageElement.Attribute( "width" );
 				//SysXmlLinq.XAttribute? heightAttribute = imageElement.Attribute( "height" );
@@ -95,12 +95,16 @@ class MarkdownBlogWriter
 				elementToRemove.Remove();
 			return document.ToString();
 
-			static string copyImage( string sourceFilePathName, string postDirectoryName )
+			static string copyImage( string sourceFilePathName, string postDirectoryPathName, string imagesDirectoryName )
 			{
 				string fileName = fixFileName( SysIo.Path.GetFileName( sourceFilePathName ) );
-				string targetFilePathName = SysIo.Path.Combine( postDirectoryName, fileName );
+				string targetDirectoryPathName = SysIo.Path.Combine( postDirectoryPathName, imagesDirectoryName );
+				SysIo.Directory.CreateDirectory( targetDirectoryPathName );
+				string targetFilePathName = SysIo.Path.Combine( targetDirectoryPathName, fileName );
 				SysIo.File.Copy( sourceFilePathName, targetFilePathName, true );
-				return fileName;
+				string result = SysIo.Path.GetRelativePath( postDirectoryPathName, targetFilePathName );
+				Assert( result == SysIo.Path.Combine( imagesDirectoryName, fileName ) );
+				return result.Replace( '\\', '/' );
 
 				static string fixFileName( string fileName )
 				{

@@ -266,8 +266,8 @@ class BloggerExportReader
 			//SysXmlLinq.XAttribute? heightAttribute = imageElement.Attribute( "height" );
 			//SysXmlLinq.XAttribute? altAttribute = imageElement.Attribute( "alt" );
 		}
-		//foreach( (SysXmlLinq.XElement linkElement, SysXmlLinq.XElement imageElement) in elementsToReplace )
-		//	linkElement.ReplaceWith( imageElement );
+		foreach( (SysXmlLinq.XElement linkElement, SysXmlLinq.XElement imageElement) in elementsToReplace )
+			linkElement.ReplaceWith( imageElement );
 		postEntity["content"] = document.ToString();
 		return;
 
