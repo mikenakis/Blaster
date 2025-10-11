@@ -17,9 +17,9 @@ using SysXmlLinq = System.Xml.Linq;
 
 class BloggerExportReader
 {
-	public static Blog ReadBloggerExport( string bloggerExportDirectory, string blogName )
+	public static Blog ReadBloggerExport( string bloggerExportDirectory, string bloggerBlogName )
 	{
-		string blogDirectory = SysIo.Path.GetFullPath( SysIo.Path.Combine( bloggerExportDirectory, "Blogs", blogName ) );
+		string blogDirectory = SysIo.Path.GetFullPath( SysIo.Path.Combine( bloggerExportDirectory, "Blogs", bloggerBlogName ) );
 		string postsAtomFile = SysIo.Path.GetFullPath( SysIo.Path.Combine( blogDirectory, "feed.atom" ) );
 		string xmlText = SysIo.File.ReadAllText( postsAtomFile );
 		SysXmlLinq.XDocument document = SysXmlLinq.XDocument.Parse( xmlText );
@@ -28,7 +28,7 @@ class BloggerExportReader
 		(Entity blogEntity, List<Entity> blogEntryEntities) = blogEntityFromXDocument( document );
 		if( False )
 			dumpBlogEntity( blogEntity, blogEntryEntities );
-		string albumDirectory = SysIo.Path.GetFullPath( SysIo.Path.Combine( bloggerExportDirectory, "Albums", blogName ) );
+		string albumDirectory = SysIo.Path.GetFullPath( SysIo.Path.Combine( bloggerExportDirectory, "Albums", bloggerBlogName ) );
 		IReadOnlyDictionary<string, Entity> imageEntities = getImageEntities( albumDirectory );
 		Blog blog = blogFromBlogEntity( blogEntity, blogEntryEntities, albumDirectory, imageEntities );
 		if( False )
@@ -53,13 +53,13 @@ class BloggerExportReader
 			}
 			if( !SysIo.File.Exists( SysIo.Path.Combine( albumDirectory, imageFileName ) ) )
 			{
-				Sys.Console.WriteLine( $"image does not exist: {imageFileName}" );
+				Sys.Console.WriteLine( $"WARNING: image does not exist: {imageFileName}" );
 				continue;
 			}
 			string key = data["filename"]!.ToString();
 			if( entities.ContainsKey( key ) )
 			{
-				Sys.Console.WriteLine( $"duplicate image entity: {key}" );
+				//Sys.Console.WriteLine( $"INFO: duplicate image entity: {key}" );
 				continue;
 			}
 			Entity entity = new Entity();
@@ -97,7 +97,8 @@ class BloggerExportReader
 		}
 	}
 
-	static Blog blogFromBlogEntity( Entity blogEntity, List<Entity> blogEntryEntities, string albumDirectory, IReadOnlyDictionary<string, Entity> imageEntities )
+	static Blog blogFromBlogEntity( Entity blogEntity, List<Entity> blogEntryEntities, string albumDirectory, //
+		IReadOnlyDictionary<string, Entity> imageEntities )
 	{
 		List<SysTasks.Task> tasks = new();
 		Dictionary<Entity, Post> entityToPostMap = new();
@@ -109,7 +110,7 @@ class BloggerExportReader
 		foreach( Entity postEntity in postEntities )
 		{
 			string status = postEntity["status"];
-			//Assert( postEntity["trashed"] == "" ); //"trashed" is the time of trashing
+			//Assert( postEntity["trashed"] == "" ); //"trashed" is the time of trashing; we do not care because we have status.
 			//Assert( postEntity["location"] == "" ); //there is one blog post with location information, and it is in Palo Alto, CA, so it is meaningless and can safely be ignored.
 			Assert( postEntity["link"] == "" );
 			Assert( postEntity["metaDescription"] == "" );
@@ -117,7 +118,7 @@ class BloggerExportReader
 			ImmutableArray<string> categories = extractCategories( postEntity );
 			ImmutableArray<Comment> comments = extractComments( blogEntryEntities, postEntity["id"], "" );
 			fixImages( postEntity, albumDirectory, imageEntities, tasks );
-			fixImageLinks( postEntity );
+			fixLinks( postEntity );
 			string postTitle = postEntity["title"];
 			var postAuthor = new Author( postEntity["author-name"], postEntity["author-uri"], authorTypeFromString( postEntity["author-type"] ) );
 			Sys.DateTime postTimeCreated = Sys.DateTime.Parse( postEntity["created"] ).ToUniversalTime();
@@ -262,9 +263,6 @@ class BloggerExportReader
 
 			string imagePathName = getImage( srcUri, albumDirectory, postEntity["id"], imageNumber++, imageEntities, tasks );
 			imageElement.SetAttributeValue( "src", imagePathName );
-			//SysXmlLinq.XAttribute? widthAttribute = imageElement.Attribute( "width" );
-			//SysXmlLinq.XAttribute? heightAttribute = imageElement.Attribute( "height" );
-			//SysXmlLinq.XAttribute? altAttribute = imageElement.Attribute( "alt" );
 		}
 		foreach( (SysXmlLinq.XElement linkElement, SysXmlLinq.XElement imageElement) in elementsToReplace )
 			linkElement.ReplaceWith( imageElement );
@@ -284,7 +282,7 @@ class BloggerExportReader
 			if( SysIo.File.Exists( filePathName ) )
 				return filePathName;
 
-			Sys.Console.WriteLine( $"image not found locally: '{uri}'" );
+			Sys.Console.WriteLine( $"WARNING: image not found locally: '{uri}'" );
 			SysTasks.Task task = SysTasks.Task.Run( () => download( uri, filePathName ) );
 			tasks.Add( task );
 			return filePathName;
@@ -306,7 +304,7 @@ class BloggerExportReader
 			{
 				try
 				{
-					Sys.Console.WriteLine( $"BEGIN download '{uri}' as '{filePathName}'" );
+					Sys.Console.WriteLine( $"INFO: begin download '{uri}' as '{filePathName}'" );
 					byte[]? imageBytes = await download( uri );
 					if( imageBytes != null )
 					{
@@ -314,7 +312,7 @@ class BloggerExportReader
 						SysIo.Directory.CreateDirectory( directory );
 						await SysIo.File.WriteAllBytesAsync( filePathName, imageBytes );
 					}
-					Sys.Console.WriteLine( $"END download '{uri}' as '{filePathName}'" );
+					Sys.Console.WriteLine( $"INFO: end download '{uri}' as '{filePathName}'" );
 				}
 				catch( Sys.Exception exception )
 				{
@@ -340,7 +338,7 @@ class BloggerExportReader
 								uri = new( response.Headers.GetValues( "Location" ).First() );
 								continue;
 							}
-							Sys.Console.WriteLine( $"Not found: '{uri}'" );
+							Sys.Console.WriteLine( $"WARNING: Not found: '{uri}'" );
 							return null; //return Sys.Text.Encoding.UTF8.GetBytes( "<svg></svg>" );
 						}
 					}
@@ -349,26 +347,70 @@ class BloggerExportReader
 		}
 	}
 
-	static void fixImageLinks( Entity postEntity )
+	static void fixLinks( Entity postEntity )
 	{
 		string content = postEntity["content"];
 		SysXmlLinq.XDocument document = SysXmlLinq.XDocument.Parse( content );
-		foreach( SysXmlLinq.XElement linkElement in document.Descendants( "a" ) )
+		foreach( SysXmlLinq.XElement linkElement in document.Descendants( "a" ).ToImmutableArray() )
 		{
-			if( !linkElement.HasElements )
+			SysXmlLinq.XAttribute? hrefAttribute = linkElement.Attribute( "href" );
+
+			//links without an `href` attribute are presumably anchors.
+			if( hrefAttribute == null )
 				continue;
-			//Assert( linkElement.FirstNode == null );
-			//Assert( linkElement.LastNode == null );
-			//Assert( linkElement.Value == "" );
+
+			string link = hrefAttribute.Value.Trim();
+
+			//If this is a link to an anchor, leave it as-is.
+			if( link.StartsWith( '#' ) )
+				continue;
+
+			//PEARL: blogger has inserted these href attributes to anchor-only links in published posts and draft posts
+			if( link == "https://www.blogger.com/null" || link == "https://draft.blogger.com/#" )
+			{
+				Sys.Console.WriteLine( $"WARNING: fixing '{link}' in \"{postEntity["title"]}\"" );
+				hrefAttribute.Remove();
+				continue;
+			}
+
+			//Some links are just invalid, containing text insteadf of an address; replace them with text.
+			if( !Sys.Uri.IsWellFormedUriString( link, Sys.UriKind.RelativeOrAbsolute ) )
+			{
+				Sys.Console.WriteLine( $"WARNING: invalid link: '{link}' in \"{postEntity["title"]}\"" );
+				linkElement.ReplaceWith( linkElement.Nodes() );
+				continue;
+			}
+
+			Sys.Uri uri = new( link );
+			Assert( uri.IsAbsoluteUri );
+			Assert( uri.Scheme == "http" || uri.Scheme == "https" );
+
+			//If this is a link to blogger.googleusercontent.com report it, ignore it.
+			if( uri.Authority == "blogger.googleusercontent.com" )
+			{
+				Sys.Console.WriteLine( $"WARNING: blogger link: '{link}' in \"{postEntity["title"]}\"" );
+				continue;
+			}
+
+			//Replace http: with https:
+			if( uri.Scheme == "http" && uri.IsDefaultPort )
+			{
+				Sys.UriBuilder uriBuilder = new( uri );
+				uriBuilder.Scheme = "https";
+				uriBuilder.Port = 443;
+				uri = uriBuilder.Uri;
+				Assert( uri.IsDefaultPort );
+				//Sys.Console.WriteLine( $"INFO: fixing '{hrefAttribute.Value}' -> '{uri}'" );
+				hrefAttribute.Value = uri.ToString();
+			}
 		}
 		postEntity["content"] = document.ToString();
-		return;
 	}
 
 	static void dumpBlogEntity( Entity entity, List<Entity> blogEntryEntities )
 	{
-		Sys.Console.WriteLine( $"blog: Id={entity["id"]} Title={entity["title"]}" );
-		Sys.Console.WriteLine( $"posts:" );
+		Sys.Console.WriteLine( $"INFO: blog: Id={entity["id"]} Title={entity["title"]}" );
+		Sys.Console.WriteLine( $"INFO: posts:" );
 		foreach( Entity postEntity in blogEntryEntities.Where( entry => entry["type"] == "POST" ) )
 		{
 			dumpPostEntity( 1, postEntity );
@@ -379,14 +421,14 @@ class BloggerExportReader
 
 		static void dumpPostEntity( int depth, Entity entity )
 		{
-			Sys.Console.WriteLine( $"{Helpers.Indentation( depth )}POST Author-Name={entity["author-name"]} Author-Uri={entity["author-uri"]} author-type={entity["author-type"]} Status={entity["status"]} Created={entity["created"]} Published={entity["published"]} Updated={entity["updated"]} Trashed={entity["trashed"]} Title={entity["title"]} MetaDescription={entity["metaDescription"]} Location={entity["location"]} Filename={entity["filename"]}, Link={entity["link"]}, Enclosure={entity["enclosure"]}, Categories={entity["categories"]}" );
-			Sys.Console.WriteLine( $"{Helpers.Indentation( depth )}    Content={Helpers.Summarize( entity["content"] )}" );
+			Sys.Console.WriteLine( $"INFO: {Helpers.Indentation( depth )}POST Author-Name={entity["author-name"]} Author-Uri={entity["author-uri"]} author-type={entity["author-type"]} Status={entity["status"]} Created={entity["created"]} Published={entity["published"]} Updated={entity["updated"]} Trashed={entity["trashed"]} Title={entity["title"]} MetaDescription={entity["metaDescription"]} Location={entity["location"]} Filename={entity["filename"]}, Link={entity["link"]}, Enclosure={entity["enclosure"]}, Categories={entity["categories"]}" );
+			Sys.Console.WriteLine( $"INFO: {Helpers.Indentation( depth )}    Content={Helpers.Summarize( entity["content"] )}" );
 		}
 
 		static void dumpCommentEntity( int depth, Entity entity )
 		{
-			Sys.Console.WriteLine( $"{Helpers.Indentation( depth )}COMMENT Author-Name={entity["author-name"]} Author-Uri={entity["author-uri"]} author-type={entity["author-type"]} Status={entity["status"]} Created={entity["created"]} Published={entity["published"]} Updated={entity["updated"]} Trashed={entity["trashed"]}  InReplyTo={entity["inReplyTo"]}" );
-			Sys.Console.WriteLine( $"{Helpers.Indentation( depth )}    Content={Helpers.Summarize( entity["content"] )}" );
+			Sys.Console.WriteLine( $"INFO: {Helpers.Indentation( depth )}COMMENT Author-Name={entity["author-name"]} Author-Uri={entity["author-uri"]} author-type={entity["author-type"]} Status={entity["status"]} Created={entity["created"]} Published={entity["published"]} Updated={entity["updated"]} Trashed={entity["trashed"]}  InReplyTo={entity["inReplyTo"]}" );
+			Sys.Console.WriteLine( $"INFO: {Helpers.Indentation( depth )}    Content={Helpers.Summarize( entity["content"] )}" );
 		}
 	}
 
@@ -529,7 +571,7 @@ class BloggerExportReader
 
 	static void output( int depth, string content )
 	{
-		Sys.Console.WriteLine( $"{Helpers.Indentation( depth )}{content}" );
+		Sys.Console.WriteLine( $"INFO: {Helpers.Indentation( depth )}{content}" );
 	}
 
 	static string? getText( SysXmlLinq.XElement element )

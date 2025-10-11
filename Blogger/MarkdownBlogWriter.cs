@@ -13,7 +13,7 @@ using SysXmlLinq = System.Xml.Linq;
 
 class MarkdownBlogWriter
 {
-	public static void WriteBlog( Blog blog, string blogDirectory )
+	public static void WriteBlog( Blog blog, string blogDirectory, Sys.Uri sourceBaseUri )
 	{
 		if( SysIo.Directory.Exists( blogDirectory ) )
 			SysIo.Directory.Delete( blogDirectory, true );
@@ -22,10 +22,10 @@ class MarkdownBlogWriter
 		var template = Template.Create( SysIo.File.ReadAllText( "PostTemplate.md" ) );
 		var utf8Bomless = new SysText.UTF8Encoding( false );
 		var markdownFromHtmlConverter = new MarkdownFromHtmlConverter();
-		foreach( Post post in blog.Posts.Sort( ( a, b ) => a.Filename.CompareTo( b.Filename ) ) )
+		foreach( Post post in blog.Posts )
 		{
-			Sys.Console.WriteLine( post.Title );
-			string postDirectoryPathName = getPostDirectoryPathName( blogDirectory, post );
+			//Sys.Console.WriteLine( post.Title );
+			string postDirectoryPathName = getPostDirectoryPathName( blogDirectory, post.Filename );
 			SysIo.Directory.CreateDirectory( postDirectoryPathName );
 			template["title"] = escapeForYaml( fixForHugo( post.Title ) );
 			template["description"] = ""; //post.Description;
@@ -38,8 +38,9 @@ class MarkdownBlogWriter
 			foreach( string category in post.Categories )
 				template["tags"] += tagTemplate.GenerateText( ("name", fixTag( category )) );
 			template["image"] = ""; //TODO
-			string content = fixPostContent( post.Content );
+			string content = post.Content;
 			content = copyImages( content, postDirectoryPathName, "images" );
+			content = fixInternalLinks( content, sourceBaseUri, post.Filename );
 			content = markdownFromHtmlConverter.Convert( content );
 			template["content"] = content;
 			template["comments"] = stringFromComments( template, post.Comments );
@@ -49,23 +50,63 @@ class MarkdownBlogWriter
 		}
 		return;
 
-		static string getPostDirectoryPathName( string blogDirectory, Post post )
+		static string fixInternalLinks( string content, Sys.Uri sourceBaseUri, string filename )
 		{
-			Assert( post.Filename[0] == '/' );
-			string bloggerPostFileName = post.Filename[1..];
+			SysXmlLinq.XDocument document = SysXmlLinq.XDocument.Parse( content );
+			foreach( SysXmlLinq.XElement linkElement in document.Descendants( "a" ).ToImmutableArray() )
+			{
+				SysXmlLinq.XAttribute? hrefAttribute = linkElement.Attribute( "href" );
+
+				//links without an `href` attribute are presumably anchors.
+				if( hrefAttribute == null )
+					continue;
+
+				string link = hrefAttribute.Value.Trim();
+
+				//If this is a link to an anchor, leave it as-is.
+				if( link.StartsWith( '#' ) )
+					continue;
+
+				Sys.Uri uri = new( link );
+				Assert( uri.IsAbsoluteUri );
+				Assert( uri.Scheme == "https" );
+
+				if( sourceBaseUri.IsBaseOf( uri ) )
+				{
+					Assert( SysIo.Path.GetExtension( uri.LocalPath ) == ".html" );
+					Assert( uri.Query == "" );
+					string localFilePathName = SysIo.Path.Combine( SysIo.Path.GetDirectoryName( uri.LocalPath ) ?? "/", SysIo.Path.GetFileNameWithoutExtension( uri.LocalPath ), "index.md" ).Replace( '\\', '/' );
+					string relativePath = SysIo.Path.GetRelativePath( filename, localFilePathName ).Replace( "\\", "/" );
+					//Sys.Uri thisUri = new( trimTrailingSlash( sourceBaseUri ) + filename );
+					Sys.Console.WriteLine( $"INFO: converting internal link: '{uri}' -> '{relativePath}'" );
+					hrefAttribute.Value = relativePath; //thisUri.MakeRelativeUri( uri ).ToString();
+				}
+			}
+			return document.ToString();
+		}
+
+		static string getPostDirectoryPathName( string blogDirectory, string bloggerPostFileName )
+		{
+			Assert( bloggerPostFileName[0] == '/' );
+			bloggerPostFileName = bloggerPostFileName[1..];
 			string postYearAndMonth = SysIo.Path.GetDirectoryName( bloggerPostFileName ) ?? throw new Sys.Exception();
 			string postSlug = filenameFrom( SysIo.Path.GetFileName( bloggerPostFileName ) );
 			string postRelativeDirectoryName = SysIo.Path.Combine( postYearAndMonth, postSlug );
 			string postDirectoryName = SysIo.Path.GetFullPath( SysIo.Path.Combine( blogDirectory, postRelativeDirectoryName ) );
 			Assert( postDirectoryName.StartsWith( blogDirectory ) );
 			return postDirectoryName;
-		}
 
-		static string fixPostContent( string content )
-		{
-			//PEARL: get rid of square brackets inside link text to work around what appears to be a ridiculous bug of Hugo
-			content = content.Replace( "Is my mentor's concern for code quality excessive? [closed]", "Is my mentor's concern for code quality excessive? (closed)" );
-			return content;
+			static string filenameFrom( string text )
+			{
+				string invalidCharacters = "<>:\"/\\|?* ";
+				foreach( char c in invalidCharacters )
+					text = text.Replace( c, '-' );
+				text = text.Replace( "--", "-" );
+				if( text.StartsWith( '-' ) )
+					text = text[1..];
+				text = SysIo.Path.GetFileNameWithoutExtension( text );
+				return text;
+			}
 		}
 
 		static string copyImages( string content, string postDirectoryName, string imagesDirectoryName )
@@ -139,18 +180,6 @@ class MarkdownBlogWriter
 					collectComments( depth + 1, commentsTemplate, commentTemplate, comment.Replies, stringBuilder );
 				}
 			}
-		}
-
-		static string filenameFrom( string text )
-		{
-			string invalidCharacters = "<>:\"/\\|?*";
-			foreach( char c in invalidCharacters )
-				text = text.Replace( c, '-' );
-			text = text.Replace( "--", "-" );
-			if( text.StartsWith( '-' ) )
-				text = text[1..];
-			text = SysIo.Path.GetFileNameWithoutExtension( text );
-			return text;
 		}
 
 		//PEARL: trim dots to work around what appears to be a ridiculous bug of Hugo

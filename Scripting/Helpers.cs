@@ -1,3 +1,4 @@
+using static Common.Statics;
 using Sys = System;
 using SysIo = System.IO;
 
@@ -48,7 +49,7 @@ static class Helpers
 		}
 		catch( Sys.Exception exception )
 		{
-			Sys.Console.WriteLine( exception.ToString() );
+			Sys.Console.WriteLine( $"ERROR: {exception.GetType()}: {exception.ToString()}" );
 			Pause();
 			Sys.Environment.Exit( -1 );
 			return default;
@@ -67,12 +68,12 @@ static class Helpers
 	public static void LaunchHugoServer()
 	{
 		//NOTE: when a script is launched from within obsidian, the current directory is the directory of the script.
-		Sys.Console.WriteLine( $"Current directory: '{normalizePath( SysIo.Directory.GetCurrentDirectory() )}'" );
+		Sys.Console.WriteLine( $"INFO: Current directory: '{normalizePath( SysIo.Directory.GetCurrentDirectory() )}'" );
 		SysIo.Directory.SetCurrentDirectory( ".." ); //switch up to the obsidian directory.
+		Assert( SysIo.Path.GetFileName( SysIo.Directory.GetCurrentDirectory() ) == "obsidian" );
 		SysIo.Directory.SetCurrentDirectory( ".." ); //switch up to the digital garden directory.
-		Sys.Console.WriteLine( $"Current directory: '{normalizePath( SysIo.Directory.GetCurrentDirectory() )}'" );
-		Sys.Console.WriteLine( $"Launching hugo..." );
-		Sys.Console.WriteLine();
+		Assert( SysIo.Path.GetFileName( SysIo.Directory.GetCurrentDirectory() ) == "digital-garden" );
+		Sys.Console.WriteLine( $"INFO: Launching hugo..." );
 
 		//exec( "hugo", @"server --buildDrafts --cleanDestinationDir --buildFuture --navigateToChanged --panicOnWarning --disableFastRender" );
 		exec( "hugo", "server --buildDrafts --cleanDestinationDir --gc --buildFuture --navigateToChanged --panicOnWarning --disableFastRender" +

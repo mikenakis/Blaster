@@ -1,22 +1,31 @@
 [*.{cs,vb}]
 
-# IDE0046: Convert to conditional expression
-dotnet_diagnostic.IDE0046.severity = none
-
-# IDE0061: Use expression body for local function
-dotnet_diagnostic.IDE0061.severity = none
-
 # IDE0011: Add braces
 dotnet_diagnostic.IDE0011.severity = none
 
-# IDE0290: Use primary constructor
-dotnet_diagnostic.IDE0290.severity = none
+# IDE0028: Simplify collection initialization
+dotnet_diagnostic.IDE0028.severity = silent
 
 # IDE0040: Add accessibility modifiers
 dotnet_style_require_accessibility_modifiers = omit_if_default
 
-# IDE0028: Simplify collection initialization
-dotnet_diagnostic.IDE0028.severity = silent
+# IDE0046: Convert to conditional expression
+dotnet_diagnostic.IDE0046.severity = none
+
+# IDE0059: Unnecessary assignment of a value
+dotnet_diagnostic.IDE0059.severity = warning
+
+# IDE0059: Unnecessary assignment of a value
+csharp_style_unused_value_assignment_preference = discard_variable
+
+# IDE0060: Remove unused parameter
+dotnet_diagnostic.IDE0060.severity = warning
+
+# IDE0061: Use expression body for local function
+dotnet_diagnostic.IDE0061.severity = none
+
+# IDE0290: Use primary constructor
+dotnet_diagnostic.IDE0290.severity = none
 
 # IDE0305: Simplify collection initialization
 dotnet_diagnostic.IDE0305.severity = silent

@@ -1,5 +1,7 @@
 namespace Blogger;
 
+using static Common.Statics;
+
 class MarkdownFromHtmlConverter
 {
 	readonly ReverseMarkdown.Converter converter;
@@ -9,8 +11,8 @@ class MarkdownFromHtmlConverter
 		var reverseMarkdownConfig = new ReverseMarkdown.Config();
 		reverseMarkdownConfig.CleanupUnnecessarySpaces = true; //default = true
 		reverseMarkdownConfig.DefaultCodeBlockLanguage = "CSharp"; //default = null
-		reverseMarkdownConfig.GithubFlavored = false; //default = false
-		reverseMarkdownConfig.PassThroughTags = ["Style"]; //default = {}
+		reverseMarkdownConfig.GithubFlavored = true; //default = false
+		reverseMarkdownConfig.PassThroughTags = ["sub", "sup"]; //default = {} PEARL: ReverseMarkdown treats the pass-through tags as case-sensitive!
 		reverseMarkdownConfig.RemoveComments = false; //default = false
 		reverseMarkdownConfig.SlackFlavored = false; //default = false
 		reverseMarkdownConfig.SmartHrefHandling = false; //default = false
