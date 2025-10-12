@@ -28,27 +28,36 @@ class MarkdownBlogWriter
 			string postDirectoryPathName = getPostDirectoryPathName( blogDirectory, post.Filename );
 			SysIo.Directory.CreateDirectory( postDirectoryPathName );
 			template["title"] = escapeForYaml( fixForHugo( post.Title ) );
-			template["description"] = ""; //post.Description;
 			template["time-created"] = post.TimeCreated.ToString( @"yyyy-MM-ddTHH:mm:ss.fffZ", SysGlob.CultureInfo.InvariantCulture );
 			template["time-updated"] = post.TimeUpdated.ToString( @"yyyy-MM-ddTHH:mm:ss.fffZ", SysGlob.CultureInfo.InvariantCulture );
 			template["draft"] = (post.Status == PostStatus.Draft || post.Status == PostStatus.SoftTrashed).ToString();
 			Template tagsTemplate = template.GetTemplate( "tags" );
-			Template tagTemplate = tagsTemplate.GetTemplate( "tag" );
-			template["tags"] = "";
-			foreach( string category in post.Categories )
-				template["tags"] += tagTemplate.GenerateText( ("name", fixTag( category )) );
+			template["tags"] = getTags( post, tagsTemplate );
 			template["image"] = ""; //TODO
 			string content = post.Content;
 			content = copyImages( content, postDirectoryPathName, "images" );
 			content = fixInternalLinks( content, sourceBaseUri, post.Filename );
 			content = markdownFromHtmlConverter.Convert( content );
 			template["content"] = content;
-			template["comments"] = stringFromComments( template, post.Comments );
+			template["comments"] = getComments( template.GetTemplate( "comments" ), post.Comments, markdownFromHtmlConverter );
 			string text = template.GenerateText();
 			string postPathName = SysIo.Path.GetFullPath( SysIo.Path.Combine( postDirectoryPathName, "index.md" ) );
 			SysIo.File.WriteAllText( postPathName, text.Replace( "\r\n", "\n" ).Replace( "\n", "\r\n" ), utf8Bomless );
 		}
 		return;
+
+		static string getTags( Post post, Template tagsTemplate )
+		{
+			if( post.Categories.Length == 0 )
+				return "";
+			Template tagTemplate = tagsTemplate.GetTemplate( "tag" );
+			SysText.StringBuilder tagsStringBuilder = new();
+			foreach( string category in post.Categories )
+				tagsStringBuilder.Append( tagTemplate.GenerateText( ("name", fixTag( category )) ) );
+			string content = tagsStringBuilder.ToString();
+			tagsTemplate["tag"] = content;
+			return tagsTemplate.GenerateText();
+		}
 
 		static string fixInternalLinks( string content, Sys.Uri sourceBaseUri, string filename )
 		{
@@ -75,14 +84,21 @@ class MarkdownBlogWriter
 				{
 					Assert( SysIo.Path.GetExtension( uri.LocalPath ) == ".html" );
 					Assert( uri.Query == "" );
-					string localFilePathName = SysIo.Path.Combine( SysIo.Path.GetDirectoryName( uri.LocalPath ) ?? "/", SysIo.Path.GetFileNameWithoutExtension( uri.LocalPath ), "index.md" ).Replace( '\\', '/' );
-					string relativePath = SysIo.Path.GetRelativePath( filename, localFilePathName ).Replace( "\\", "/" );
-					//Sys.Uri thisUri = new( trimTrailingSlash( sourceBaseUri ) + filename );
+					string postDirectoryPathName = getPathNameWithoutExtension( uri.LocalPath );
+					string postFilePathName = SysIo.Path.Combine( postDirectoryPathName, "index.md" );
+					string relativePath = SysIo.Path.GetRelativePath( filename, postFilePathName );
 					Sys.Console.WriteLine( $"INFO: converting internal link: '{uri}' -> '{relativePath}'" );
-					hrefAttribute.Value = relativePath; //thisUri.MakeRelativeUri( uri ).ToString();
+					hrefAttribute.Value = relativePath.Replace( '\\', '/' );
 				}
 			}
 			return document.ToString();
+		}
+
+		static string getPathNameWithoutExtension( string pathName )
+		{
+			string directoryName = SysIo.Path.GetDirectoryName( pathName ) ?? "/";
+			string fileName = SysIo.Path.GetFileNameWithoutExtension( pathName );
+			return SysIo.Path.Combine( directoryName, fileName );
 		}
 
 		static string getPostDirectoryPathName( string blogDirectory, string bloggerPostFileName )
@@ -154,30 +170,39 @@ class MarkdownBlogWriter
 			}
 		}
 
-		static string stringFromComments( Template template, ImmutableArray<Comment> comments )
+		static string getComments( Template commentsTemplate, ImmutableArray<Comment> comments, MarkdownFromHtmlConverter markdownFromHtmlConverter )
 		{
-			if( comments.Length == 0 )
-				return "";
-			Template commentsTemplate = template.GetTemplate( "comments" );
 			Template commentTemplate = commentsTemplate.GetTemplate( "comment" );
-			SysText.StringBuilder stringBuilder = new();
-			collectComments( 0, commentsTemplate, commentTemplate, comments, stringBuilder );
-			commentsTemplate["comment"] = stringBuilder.ToString();
+			string content = collectComments( 0, commentTemplate, comments, markdownFromHtmlConverter );
+			if( content == "" )
+				return content;
+			commentsTemplate["comment"] = content;
 			return commentsTemplate.GenerateText();
 
-			static void collectComments( int depth, Template commentsTemplate, Template commentTemplate, ImmutableArray<Comment> comments, SysText.StringBuilder stringBuilder )
+			static string collectComments( int depth, Template commentTemplate, ImmutableArray<Comment> comments, MarkdownFromHtmlConverter markdownFromHtmlConverter )
 			{
-				foreach( Comment comment in comments )
+				SysText.StringBuilder stringBuilder = new();
+				recurse( depth, commentTemplate, comments, stringBuilder, markdownFromHtmlConverter );
+				return stringBuilder.ToString();
+
+				static void recurse( int depth, Template commentTemplate, ImmutableArray<Comment> comments, SysText.StringBuilder stringBuilder, MarkdownFromHtmlConverter markdownFromHtmlConverter )
 				{
-					commentTemplate["indentation"] = Helpers.Indentation( depth );
-					commentTemplate["status"] = commentTemplate.GetTemplate( "status" ).GenerateText( ("value", comment.Status.ToString()) );
-					commentTemplate["author-name"] = commentTemplate.GetTemplate( "author-name" ).GenerateText( ("value", comment.Author.Name) );
-					commentTemplate["author-uri"] = comment.Author.Uri == "" ? "" : commentTemplate.GetTemplate( "author-uri" ).GenerateText( ("value", comment.Author.Uri) );
-					commentTemplate["time-created"] = commentTemplate.GetTemplate( "time-created" ).GenerateText( ("value", comment.TimeCreated.ToString()) );
-					commentTemplate["content"] = string.Join( '\n', comment.Content.Split( "\n" ).Select( line => Helpers.Indentation( depth + 1 ) + line ) );
-					string commentText = commentTemplate.GenerateText();
-					stringBuilder.Append( commentText );
-					collectComments( depth + 1, commentsTemplate, commentTemplate, comment.Replies, stringBuilder );
+					foreach( Comment comment in comments )
+					{
+						if( comment.Status == CommentStatus.Spam || comment.Status == CommentStatus.Ghosted )
+							continue;
+						commentTemplate["indentation"] = Helpers.Indentation( depth );
+						string author = comment.Author.Name;
+						if( comment.Author.Uri != "" )
+							author = $"[{author}]({comment.Author.Uri})";
+						commentTemplate["author"] = commentTemplate.GetTemplate( "author" ).GenerateText( ("value", author) );
+						commentTemplate["time-created"] = commentTemplate.GetTemplate( "time-created" ).GenerateText( ("value", comment.TimeCreated.ToString( "yyyy-MM-dd HH:mm:ss \"UTC\"", SysGlob.CultureInfo.InvariantCulture )) );
+						string content = markdownFromHtmlConverter.Convert( comment.Content );
+						commentTemplate["content"] = string.Join( '\n', content.Split( "\n" ).Select( line => Helpers.Indentation( depth + 1 ) + line ) );
+						string commentText = commentTemplate.GenerateText();
+						stringBuilder.Append( commentText );
+						recurse( depth + 1, commentTemplate, comment.Replies, stringBuilder, markdownFromHtmlConverter );
+					}
 				}
 			}
 		}

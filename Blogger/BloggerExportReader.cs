@@ -126,6 +126,7 @@ class BloggerExportReader
 			Sys.DateTime postTimeUpdated = Sys.DateTime.Parse( postEntity["updated"] ).ToUniversalTime();
 			string postContent = postEntity["content"];
 			string postFileName = fixPostFileName( postEntity["filename"], postTimeCreated, postTitle );
+			Assert( categories.All( category => category.Length > 0 ) );
 			Post post = new Post( postStatusFromString( status ), postFileName, postTitle, postAuthor, //
 				postTimeCreated, postTimePublished, postTimeUpdated, postContent, categories, comments );
 			posts.Add( post );
@@ -136,7 +137,7 @@ class BloggerExportReader
 
 		static ImmutableArray<string> extractCategories( Entity postEntity )
 		{
-			return postEntity["categories"].Split( ',', Sys.StringSplitOptions.TrimEntries ).ToImmutableArray();
+			return postEntity["categories"].Split( ',', Sys.StringSplitOptions.TrimEntries | Sys.StringSplitOptions.RemoveEmptyEntries ).ToImmutableArray();
 		}
 
 		static ImmutableArray<Comment> extractComments( List<Entity> blogEntryEntities, string postId, string inReplyTo )
@@ -227,7 +228,19 @@ class BloggerExportReader
 		content = "<!DOCTYPE html PUBLIC " +
 			"\"-//W3C//DTD XHTML 1.0 Transitional//EN\" \"http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd\"" +
 			"[" +
+			"<!ENTITY lt \"&#60;\">" +
+			"<!ENTITY gt \"&#62;\">" +
+			"<!ENTITY amp \"&#38;\">" +
 			"<!ENTITY nbsp \"&#160;\">" +
+			// &quot; 	&#34; 	
+			// &apos; 	&#39; 	
+			// &cent; 	&#162; 	
+			// &pound; 	&#163; 	
+			// &yen; 	&#165; 	
+			// &euro; 	&#8364; 	
+			// &copy; 	&#169; 	
+			// &reg; 	&#174; 	
+			// &trade; 	&#8482;
 			"]>" +
 			$"<html><head></head><body>" + content + "</body></html>";
 
