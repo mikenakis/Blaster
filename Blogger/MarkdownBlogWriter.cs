@@ -25,7 +25,9 @@ class MarkdownBlogWriter
 		foreach( Post post in blog.Posts )
 		{
 			//Sys.Console.WriteLine( post.Title );
-			string postDirectoryPathName = getPostDirectoryPathName( blogDirectory, post.Filename );
+			string postLocalPathName = post.Filename;
+			string postRelativeDirectoryName = getPostRelativeDirectoryPathName( postLocalPathName );
+			string postDirectoryPathName = getPostDirectoryPathName( blogDirectory, postRelativeDirectoryName );
 			SysIo.Directory.CreateDirectory( postDirectoryPathName );
 			template["title"] = escapeForYaml( fixForHugo( post.Title ) );
 			template["time-created"] = post.TimeCreated.ToString( @"yyyy-MM-ddTHH:mm:ss.fffZ", SysGlob.CultureInfo.InvariantCulture );
@@ -36,7 +38,7 @@ class MarkdownBlogWriter
 			template["image"] = ""; //TODO
 			string content = post.Content;
 			content = copyImages( content, postDirectoryPathName, "images" );
-			content = fixInternalLinks( content, sourceBaseUri, post.Filename );
+			content = fixInternalLinks( content, sourceBaseUri, postLocalPathName );
 			content = markdownFromHtmlConverter.Convert( content );
 			template["content"] = content;
 			template["comments"] = getComments( template.GetTemplate( "comments" ), post.Comments, markdownFromHtmlConverter );
@@ -84,7 +86,9 @@ class MarkdownBlogWriter
 				{
 					Assert( SysIo.Path.GetExtension( uri.LocalPath ) == ".html" );
 					Assert( uri.Query == "" );
-					string postDirectoryPathName = getPathNameWithoutExtension( uri.LocalPath );
+					string postLocalPathName = uri.LocalPath;
+					string postRelativeDirectoryName = "/" + getPostRelativeDirectoryPathName( postLocalPathName );
+					string postDirectoryPathName = getPathNameWithoutExtension( postRelativeDirectoryName );
 					string postFilePathName = SysIo.Path.Combine( postDirectoryPathName, "index.md" );
 					string relativePath = SysIo.Path.GetRelativePath( filename, postFilePathName );
 					Sys.Console.WriteLine( $"INFO: converting internal link: '{uri}' -> '{relativePath}'" );
@@ -101,16 +105,13 @@ class MarkdownBlogWriter
 			return SysIo.Path.Combine( directoryName, fileName );
 		}
 
-		static string getPostDirectoryPathName( string blogDirectory, string bloggerPostFileName )
+		static string getPostRelativeDirectoryPathName( string bloggerPostFileName )
 		{
 			Assert( bloggerPostFileName[0] == '/' );
 			bloggerPostFileName = bloggerPostFileName[1..];
 			string postYearAndMonth = SysIo.Path.GetDirectoryName( bloggerPostFileName ) ?? throw new Sys.Exception();
 			string postSlug = filenameFrom( SysIo.Path.GetFileName( bloggerPostFileName ) );
-			string postRelativeDirectoryName = SysIo.Path.Combine( postYearAndMonth, postSlug );
-			string postDirectoryName = SysIo.Path.GetFullPath( SysIo.Path.Combine( blogDirectory, postRelativeDirectoryName ) );
-			Assert( postDirectoryName.StartsWith( blogDirectory ) );
-			return postDirectoryName;
+			return SysIo.Path.Combine( postYearAndMonth, postSlug ).Replace( '\\', '/' );
 
 			static string filenameFrom( string text )
 			{
@@ -123,6 +124,13 @@ class MarkdownBlogWriter
 				text = SysIo.Path.GetFileNameWithoutExtension( text );
 				return text;
 			}
+		}
+
+		static string getPostDirectoryPathName( string blogDirectory, string postRelativeDirectoryName )
+		{
+			string postDirectoryName = SysIo.Path.GetFullPath( SysIo.Path.Combine( blogDirectory, postRelativeDirectoryName ) );
+			Assert( postDirectoryName.StartsWith( blogDirectory ) );
+			return postDirectoryName;
 		}
 
 		static string copyImages( string content, string postDirectoryName, string imagesDirectoryName )
@@ -144,9 +152,6 @@ class MarkdownBlogWriter
 				}
 				string fileName = copyImage( sourceAttribute.Value, postDirectoryName, imagesDirectoryName );
 				imageElement.SetAttributeValue( "src", fileName );
-				//SysXmlLinq.XAttribute? widthAttribute = imageElement.Attribute( "width" );
-				//SysXmlLinq.XAttribute? heightAttribute = imageElement.Attribute( "height" );
-				//SysXmlLinq.XAttribute? altAttribute = imageElement.Attribute( "alt" );
 			}
 			foreach( SysXmlLinq.XElement elementToRemove in elementsToRemove )
 				elementToRemove.Remove();
@@ -197,12 +202,25 @@ class MarkdownBlogWriter
 							author = $"[{author}]({comment.Author.Uri})";
 						commentTemplate["author"] = commentTemplate.GetTemplate( "author" ).GenerateText( ("value", author) );
 						commentTemplate["time-created"] = commentTemplate.GetTemplate( "time-created" ).GenerateText( ("value", comment.TimeCreated.ToString( "yyyy-MM-dd HH:mm:ss \"UTC\"", SysGlob.CultureInfo.InvariantCulture )) );
-						string content = markdownFromHtmlConverter.Convert( comment.Content );
+						string content = comment.Content;
+						content = replaceAll( content, "$$", "$ $" ); //PEARL: disallow two dollar signs in a row to work around some weirdness of obsidian.
+						content = markdownFromHtmlConverter.Convert( content );
 						commentTemplate["content"] = string.Join( '\n', content.Split( "\n" ).Select( line => Helpers.Indentation( depth + 1 ) + line ) );
 						string commentText = commentTemplate.GenerateText();
 						stringBuilder.Append( commentText );
 						recurse( depth + 1, commentTemplate, comment.Replies, stringBuilder, markdownFromHtmlConverter );
 					}
+				}
+			}
+
+			static string replaceAll( string s, string a, string b )
+			{
+				while( true )
+				{
+					string t = s.Replace( a, b );
+					if( t == s )
+						return s;
+					s = t;
 				}
 			}
 		}
@@ -222,8 +240,7 @@ class MarkdownBlogWriter
 
 	private static string fixTag( string tag )
 	{
-		tag = tag.Replace( ' ', '-' );
-		return tag;
+		return tag.Replace( ' ', '-' );
 	}
 
 	delegate void TextConsumer( Sys.ReadOnlySpan<char> text );
@@ -258,7 +275,7 @@ class MarkdownBlogWriter
 						emitEscapedCharacter( textConsumer, '\\' );
 						break;
 					default:
-						emitOtherCharacter( textConsumer, c );
+						textConsumer.Invoke( isPrintable( c ) ? [c] : ['\\', 'u', d( c >> 12 & 0x0f ), d( c >> 8 & 0x0f ), d( c >> 4 & 0x0f ), d( c & 0x0f )] );
 						break;
 				}
 		textConsumer.Invoke( new Sys.ReadOnlySpan<char>( in quoteCharacter ) );
@@ -266,34 +283,14 @@ class MarkdownBlogWriter
 
 		static void emitEscapedCharacter( TextConsumer textConsumer, char c )
 		{
-			Sys.Span<char> buffer = stackalloc char[2];
-			buffer[0] = '\\';
-			buffer[1] = c;
+			Sys.Span<char> buffer = ['\\', c];
 			textConsumer.Invoke( buffer );
 		}
 
-		static void emitOtherCharacter( TextConsumer textConsumer, char c )
+		static char d( int nibble )
 		{
-			if( isPrintable( c ) )
-				textConsumer.Invoke( new Sys.ReadOnlySpan<char>( in c ) );
-			else
-			{
-				Sys.Span<char> buffer = stackalloc char[6];
-				buffer[0] = '\\';
-				buffer[1] = 'u';
-				buffer[2] = digitFromNibble( c >> 12 & 0x0f );
-				buffer[3] = digitFromNibble( c >> 8 & 0x0f );
-				buffer[4] = digitFromNibble( c >> 4 & 0x0f );
-				buffer[5] = digitFromNibble( c & 0x0f );
-				textConsumer.Invoke( buffer );
-			}
-			return;
-
-			static char digitFromNibble( int nibble )
-			{
-				Assert( nibble is >= 0 and < 16 );
-				return (char)((nibble >= 10 ? 'a' - 10 : '0') + nibble);
-			}
+			Assert( nibble is >= 0 and < 16 );
+			return (char)((nibble >= 10 ? 'a' - 10 : '0') + nibble);
 		}
 	}
 
