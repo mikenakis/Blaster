@@ -76,7 +76,8 @@ static class Helpers
 		Sys.Console.WriteLine( $"INFO: Launching hugo..." );
 
 		//exec( "hugo", @"server --buildDrafts --cleanDestinationDir --buildFuture --navigateToChanged --panicOnWarning --disableFastRender" );
-		exec( "hugo", "server --buildDrafts --cleanDestinationDir --gc --buildFuture --navigateToChanged --panicOnWarning --disableFastRender" +
+		exec( "hugo", "server --buildDrafts --cleanDestinationDir --gc --buildFuture --navigateToChanged --disableFastRender" +
+			// " --panicOnWarning" + hugo does not offer the ability to print messages, so we have to print warnings instead, so we cannot panic on them.
 			$@" --themesDir ..\hugo-themes --source michael.gr-hugo-files" +
 			// PEARL: these directories are relative to the configuration file, even when specified from the
 			// command-line and the current directory is elsewhere.
