@@ -76,18 +76,27 @@ static class Helpers
 		Sys.Console.WriteLine( $"INFO: Launching hugo..." );
 
 		//exec( "hugo", @"server --buildDrafts --cleanDestinationDir --buildFuture --navigateToChanged --panicOnWarning --disableFastRender" );
-		exec( "hugo", "server --buildDrafts --cleanDestinationDir --gc --buildFuture --navigateToChanged --disableFastRender" +
-			// " --panicOnWarning" + hugo does not offer the ability to print messages, so we have to print warnings instead, so we cannot panic on them.
-			$@" --themesDir ..\hugo-themes --source michael.gr-hugo-files" +
+		exec( "hugo", "server --buildDrafts --gc --buildFuture --navigateToChanged --disableFastRender" +
+			" --cleanDestinationDir" + //NOTE: this does not delete everything, but it does delete .gitignore 
+									   // " --panicOnWarning" + hugo does not offer the ability to print messages, so we have to print warnings instead, so we cannot panic on them.
+			$@" --themesDir ../hugo-themes --source michael.gr-hugo-files" +
 			// PEARL: these directories are relative to the configuration file, even when specified from the
 			// command-line and the current directory is elsewhere.
-			@" --destination ..\michael.gr-hugo-publish" +
-			@" --contentDir ..\obsidian\blog.michael.gr\content" );
+			@" --destination ../michael.gr-hugo-publish" +
+			@" --contentDir ../obsidian/blog.michael.gr/content" );
 
 		// --minify TODO
 		// --printPathWarnings    cannot use because these warnings keep randomly popping up.
 		// --printUnusedTemplates cannot use because the stack theme issues such a warning.
 	}
+
+	//	string destination = "../michael.gr-hugo-publish";
+	//	empty( destination );
+	//static void empty( string directory )
+	//{
+	//	string path = SysIo.Path.GetFullPath( directory );
+	//	Sys.Console.WriteLine( $"Emptying {path}" );
+	//}
 
 	static Sys.Diagnostics.Process execAsync( string command, string arguments )
 	{
