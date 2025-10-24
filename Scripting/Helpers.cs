@@ -1,13 +1,13 @@
-using static Common.Statics;
-using Sys = System;
-using SysIo = System.IO;
+using MikeNakis.Kit;
+using MikeNakis.Kit.Extensions;
+using static MikeNakis.Kit.GlobalStatics;
 
 static class Helpers
 {
 	static string getParentDirectory( string directory, string suffix )
 	{
 		directory = normalizePath( directory );
-		if( !directory.EndsWith( suffix ) )
+		if( !directory.EndsWith2( suffix ) )
 			throw new Sys.Exception( $"Directory '{directory}' does not end with '{suffix}'" );
 		return combine( directory, ".." );
 	}
@@ -29,7 +29,7 @@ static class Helpers
 
 	static string normalizePath( string path )
 	{
-		return SysIo.Path.GetFullPath( path ).Replace( "\\", "/" );
+		return SysIo.Path.GetFullPath( path ).Replace2( "\\", "/" );
 	}
 
 	static string combine( string rootedPath, string relativePath )
@@ -58,7 +58,7 @@ static class Helpers
 
 	public static void RunSafe( Sys.Action action )
 	{
-		RunSafe<int>( () =>
+		RunSafe( () =>
 		{
 			action.Invoke();
 			return 0;
@@ -98,14 +98,14 @@ static class Helpers
 	//	Sys.Console.WriteLine( $"Emptying {path}" );
 	//}
 
-	static Sys.Diagnostics.Process execAsync( string command, string arguments )
+	static SysDiag.Process execAsync( string command, string arguments )
 	{
-		return Sys.Diagnostics.Process.Start( command, arguments );
+		return SysDiag.Process.Start( command, arguments );
 	}
 
 	static int tryExec( string command, string arguments )
 	{
-		using( Sys.Diagnostics.Process process = execAsync( command, arguments ) )
+		using( SysDiag.Process process = execAsync( command, arguments ) )
 		{
 			if( process == null )
 				return 0;
@@ -118,7 +118,7 @@ static class Helpers
 	{
 		int exitCode = tryExec( command, arguments );
 		if( exitCode != 0 )
-			throw new Sys.Exception( $"The command '{command}' returned {exitCode} (current directory: {SysIo.Directory.GetCurrentDirectory()})" );
+			throw new ApplicationException( $"The command '{command}' returned {exitCode} (current directory: {SysIo.Directory.GetCurrentDirectory()})" );
 	}
 
 	public static void Pause()
