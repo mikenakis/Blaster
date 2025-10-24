@@ -1,46 +1,10 @@
+using System.Collections.Immutable;
 using MikeNakis.Kit;
-using MikeNakis.Kit.Extensions;
+using MikeNakis.Kit.FileSystem;
 using static MikeNakis.Kit.GlobalStatics;
 
 static class Helpers
 {
-	static string getParentDirectory( string directory, string suffix )
-	{
-		directory = normalizePath( directory );
-		if( !directory.EndsWith2( suffix ) )
-			throw new Sys.Exception( $"Directory '{directory}' does not end with '{suffix}'" );
-		return combine( directory, ".." );
-	}
-
-	static string getObsidianDirectory()
-	{
-		return getParentDirectory( normalizePath( SysIo.Directory.GetCurrentDirectory() ), "digital-garden/obsidian/Scripts" );
-	}
-
-	static string getDigitalGardenDirectory()
-	{
-		return getParentDirectory( getObsidianDirectory(), "digital-garden/obsidian" );
-	}
-
-	static string getFullPathFromDigitalGardenRelativePath( string relativePath )
-	{
-		return combine( getDigitalGardenDirectory(), relativePath );
-	}
-
-	static string normalizePath( string path )
-	{
-		return SysIo.Path.GetFullPath( path ).Replace2( "\\", "/" );
-	}
-
-	static string combine( string rootedPath, string relativePath )
-	{
-		if( !SysIo.Path.IsPathRooted( rootedPath ) )
-			throw new Sys.Exception( $"Path '{rootedPath}' is relative" );
-		if( SysIo.Path.IsPathRooted( relativePath ) )
-			throw new Sys.Exception( $"Path '{relativePath}' is not relative" );
-		return normalizePath( SysIo.Path.Combine( rootedPath, relativePath ) );
-	}
-
 	public static T RunSafe<T>( Sys.Func<T> func )
 	{
 		try
@@ -68,71 +32,74 @@ static class Helpers
 	public static void LaunchHugoServer()
 	{
 		//NOTE: when a script is launched from within obsidian, the current directory is the directory of the script.
-		Sys.Console.WriteLine( $"INFO: Current directory: '{normalizePath( SysIo.Directory.GetCurrentDirectory() )}'" );
-		SysIo.Directory.SetCurrentDirectory( ".." ); //switch up to the obsidian directory.
-		Assert( SysIo.Path.GetFileName( SysIo.Directory.GetCurrentDirectory() ) == "obsidian" );
-		SysIo.Directory.SetCurrentDirectory( ".." ); //switch up to the digital garden directory.
-		Assert( SysIo.Path.GetFileName( SysIo.Directory.GetCurrentDirectory() ) == "digital-garden" );
-		Sys.Console.WriteLine( $"INFO: Launching hugo..." );
+		Sys.Console.WriteLine( $"INFO: Current directory: '{DirectoryPath.GetWorkingDirectory()}'" );
+		DirectoryPath digitalGardenDirectoryPath = DirectoryPath.GetWorkingDirectory().GetParent().GetParent();
+		Assert( digitalGardenDirectoryPath.GetDirectoryName() == "digital-garden" );
 
-		//exec( "hugo", @"server --buildDrafts --cleanDestinationDir --buildFuture --navigateToChanged --panicOnWarning --disableFastRender" );
-		exec( "hugo", "server --buildDrafts --gc --buildFuture --navigateToChanged --disableFastRender" +
-			" --cleanDestinationDir" + //NOTE: this does not delete everything, but it does delete .gitignore 
-									   // " --panicOnWarning" + hugo does not offer the ability to print messages, so we have to print warnings instead, so we cannot panic on them.
+		DirectoryPath destinationDirectoryPath = digitalGardenDirectoryPath.SubDirectory( "michael.gr-hugo-publish" );
+
+		//PEARL: When the --cleanDestinationDir argument is passed to hugo, it is clever enough to refrain from deleting
+		//       any subdirectories that begin with '.', so it does not delete the .git directory, but it is not smart
+		//       enough to refrain from deleting any files that begin with '.', so it does delete .gitignore; how lame
+		//       is that! Hugo developers are too arrogant to acknowledge that this is a problem.
+		//       So, we have no option but to clean the destination directory ourselves. 
+		Sys.Console.WriteLine( $"INFO: Emptying the destination directory..." );
+		empty( destinationDirectoryPath );
+
+		Sys.Console.WriteLine( $"INFO: Launching hugo..." );
+		exec( digitalGardenDirectoryPath, "hugo", "server --buildDrafts --gc --buildFuture --navigateToChanged --disableFastRender" +
+			//" --cleanDestinationDir" + we cannot use this, we have to empty the destination directory ourselves
+			// " --panicOnWarning" + hugo does not offer the ability to print messages, so we have to print warnings instead, so we cannot panic on them.
 			$@" --themesDir ../hugo-themes --source michael.gr-hugo-files" +
 			// PEARL: these directories are relative to the configuration file, even when specified from the
 			// command-line and the current directory is elsewhere.
-			@" --destination ../michael.gr-hugo-publish" +
+			$" --destination \"{destinationDirectoryPath}\"" +
 			@" --contentDir ../obsidian/blog.michael.gr/content" );
-
 		// --minify TODO
 		// --printPathWarnings    cannot use because these warnings keep randomly popping up.
 		// --printUnusedTemplates cannot use because the stack theme issues such a warning.
 	}
 
-	//	string destination = "../michael.gr-hugo-publish";
-	//	empty( destination );
-	//static void empty( string directory )
-	//{
-	//	string path = SysIo.Path.GetFullPath( directory );
-	//	Sys.Console.WriteLine( $"Emptying {path}" );
-	//}
-
-	static SysDiag.Process execAsync( string command, string arguments )
+	static void empty( DirectoryPath destinationDirectoryPath )
 	{
-		return SysDiag.Process.Start( command, arguments );
+		foreach( FilePath filePath in destinationDirectoryPath.EnumerateFiles( "*" ).ToImmutableArray() )
+		{
+			if( filePath.GetFileNameAndExtension().StartsWith( '.' ) )
+				continue;
+			filePath.Delete();
+		}
+		foreach( DirectoryPath directoryPath in destinationDirectoryPath.EnumerateDirectories().ToImmutableArray() )
+		{
+			if( directoryPath.GetDirectoryName().StartsWith( '.' ) )
+				continue;
+			directoryPath.Delete();
+		}
 	}
 
-	static int tryExec( string command, string arguments )
+	static int tryExec( DirectoryPath workingDirectoryPath, string command, string arguments )
 	{
-		using( SysDiag.Process process = execAsync( command, arguments ) )
+		SysDiag.ProcessStartInfo startInfo = new SysDiag.ProcessStartInfo( command, arguments );
+		startInfo.WorkingDirectory = workingDirectoryPath.Path;
+		using( SysDiag.Process process = new SysDiag.Process() )
 		{
-			if( process == null )
-				return 0;
+			process.StartInfo = startInfo;
+			if( !process.Start() )
+				throw new SysIo.IOException();
 			process.WaitForExit();
 			return process.ExitCode;
 		}
 	}
 
-	static void exec( string command, string arguments )
+	static void exec( DirectoryPath workingDirectoryPath, string command, string arguments )
 	{
-		int exitCode = tryExec( command, arguments );
+		int exitCode = tryExec( workingDirectoryPath, command, arguments );
 		if( exitCode != 0 )
-			throw new ApplicationException( $"The command '{command}' returned {exitCode} (current directory: {SysIo.Directory.GetCurrentDirectory()})" );
+			throw new ApplicationException( $"The command '{command}' returned {exitCode} in directory '{workingDirectoryPath}'" );
 	}
 
 	public static void Pause()
 	{
 		Sys.Console.Write( "Press [Enter] to terminate: " );
 		Sys.Console.ReadLine();
-	}
-
-	public static void GitCommitAndPush( string digitalGardenRelativeRepositoryDirectory )
-	{
-		string repositoryDirectory = getFullPathFromDigitalGardenRelativePath( digitalGardenRelativeRepositoryDirectory );
-		SysIo.Directory.SetCurrentDirectory( repositoryDirectory );
-		exec( "git", "add ." );
-		tryExec( "git", "commit -q -m \"single-click-commit\"" );
-		tryExec( "git", "push -q" );
 	}
 }
