@@ -1,12 +1,12 @@
 namespace Scripting;
 
-using MikeNakis.Kit.FileSystem;
+using MikeNakis.Kit;
 
 public sealed class ScriptsMain
 {
 	public static void Main( string[] arguments )
 	{
-		Sys.Console.WriteLine( $"INFO: Current directory: '{DirectoryPath.GetWorkingDirectory()}'" );
+		Sys.Console.WriteLine( $"INFO: Current directory: '{DotNetHelpers.GetWorkingDirectoryPath()}'" );
 		Sys.Console.WriteLine( $"INFO: Arguments: [{string.Join( ", ", arguments )}]" );
 
 		//when a script is launched from within obsidian, the current directory is the directory of the script, so

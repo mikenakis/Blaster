@@ -32,11 +32,11 @@ static class Helpers
 	public static void LaunchHugoServer()
 	{
 		//NOTE: when a script is launched from within obsidian, the current directory is the directory of the script.
-		Sys.Console.WriteLine( $"INFO: Current directory: '{DirectoryPath.GetWorkingDirectory()}'" );
-		DirectoryPath digitalGardenDirectoryPath = DirectoryPath.GetWorkingDirectory().GetParent().GetParent();
+		Sys.Console.WriteLine( $"INFO: Current directory: '{DotNetHelpers.GetWorkingDirectoryPath()}'" );
+		DirectoryPath digitalGardenDirectoryPath = DotNetHelpers.GetWorkingDirectoryPath()?.GetParent()?.GetParent() ?? throw new AssertionFailureException();
 		Assert( digitalGardenDirectoryPath.GetDirectoryName() == "digital-garden" );
 
-		DirectoryPath destinationDirectoryPath = digitalGardenDirectoryPath.SubDirectory( "michael.gr-hugo-publish" );
+		DirectoryPath destinationDirectoryPath = digitalGardenDirectoryPath.Directory( "michael.gr-hugo-publish" );
 
 		//PEARL: When the --cleanDestinationDir argument is passed to hugo, it is clever enough to refrain from deleting
 		//       any subdirectories that begin with '.', so it does not delete the .git directory, but it is not smart
