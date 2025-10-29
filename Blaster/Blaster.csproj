@@ -16,6 +16,7 @@
 		<ProjectReference Include="..\..\Solution\Framework\Framework.csproj" />
 		<ProjectReference Include="..\..\Solution\Structured.Json\Structured.Json.csproj" />
 		<ProjectReference Include="..\..\Solution\Structured\Structured.csproj" />
+		<PackageReference Include="HtmlAgilityPack" Version="1.12.4" />
 		<PackageReference Include="Markdig" Version="0.43.0" />	
 		<PackageReference Include="MarkdigExtensions.UrlRewriter" Version="1.0.0" />
 		<PackageReference Include="MarkdigExtensions.ImageAsFigure" Version="1.0.0" />		

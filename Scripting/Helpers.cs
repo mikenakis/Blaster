@@ -1,4 +1,3 @@
-using System.Collections.Immutable;
 using MikeNakis.Kit;
 using MikeNakis.Kit.FileSystem;
 using static MikeNakis.Kit.GlobalStatics;
@@ -38,42 +37,18 @@ static class Helpers
 
 		DirectoryPath destinationDirectoryPath = digitalGardenDirectoryPath.Directory( "michael.gr-hugo-publish" );
 
-		//PEARL: When the --cleanDestinationDir argument is passed to hugo, it is clever enough to refrain from deleting
-		//       any subdirectories that begin with '.', so it does not delete the .git directory, but it is not smart
-		//       enough to refrain from deleting any files that begin with '.', so it does delete .gitignore; how lame
-		//       is that! Hugo developers are too arrogant to acknowledge that this is a problem.
-		//       So, we have no option but to clean the destination directory ourselves. 
-		Sys.Console.WriteLine( $"INFO: Emptying the destination directory..." );
-		empty( destinationDirectoryPath );
-
 		Sys.Console.WriteLine( $"INFO: Launching hugo..." );
-		exec( digitalGardenDirectoryPath, "hugo", "server --buildDrafts --gc --buildFuture --navigateToChanged --disableFastRender" +
-			//" --cleanDestinationDir" + we cannot use this, we have to empty the destination directory ourselves
+		exec( digitalGardenDirectoryPath, "hugo", "server --buildDrafts --gc --buildFuture --navigateToChanged --disableFastRender --cleanDestinationDir"
 			// " --panicOnWarning" + hugo does not offer the ability to print messages, so we have to print warnings instead, so we cannot panic on them.
-			$@" --themesDir ../hugo-themes --source michael.gr-hugo-files" +
+			+ $@" --themesDir C:\Users\MBV\Personal\Documents\digital-garden\hugo-themes"
+			+ $@" --source C:\Users\MBV\Personal\Documents\digital-garden\obsidian\blog.michael.gr\hugo-files"
 			// PEARL: these directories are relative to the configuration file, even when specified from the
 			// command-line and the current directory is elsewhere.
-			$" --destination \"{destinationDirectoryPath}\"" +
-			@" --contentDir ../obsidian/blog.michael.gr/content" );
+			+ $" --destination \"{destinationDirectoryPath}\""
+			+ @" --contentDir C:\Users\MBV\Personal\Documents\digital-garden\obsidian\blog.michael.gr\content" );
 		// --minify TODO
 		// --printPathWarnings    cannot use because these warnings keep randomly popping up.
 		// --printUnusedTemplates cannot use because the stack theme issues such a warning.
-	}
-
-	static void empty( DirectoryPath destinationDirectoryPath )
-	{
-		foreach( FilePath filePath in destinationDirectoryPath.EnumerateFiles( "*" ).ToImmutableArray() )
-		{
-			if( filePath.GetFileNameAndExtension().StartsWith( '.' ) )
-				continue;
-			filePath.Delete();
-		}
-		foreach( DirectoryPath directoryPath in destinationDirectoryPath.EnumerateDirectories().ToImmutableArray() )
-		{
-			if( directoryPath.GetDirectoryName().StartsWith( '.' ) )
-				continue;
-			directoryPath.Delete();
-		}
 	}
 
 	static int tryExec( DirectoryPath workingDirectoryPath, string command, string arguments )

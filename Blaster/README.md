@@ -69,6 +69,13 @@ Additionally, you can specify a few special mappings:
    A list mapping defines the view to use to emit a list.
 
 
+TODO:
+
+- Add minification of css, js files
+- Add embedding of small svg files
+- Research the "integrity" attribute of `<script>` and possibly implement it
+- Research the "srcset" attribute of `<img>` and possibly implement it
+- Implement local web server with livereload (otherwise we can't have livereload)
 
 
 * * *

@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<TargetFramework>net9.0</TargetFramework>
+		<IsTestProject>True</IsTestProject>
+		<Configurations>Debug</Configurations>
+	</PropertyGroup>
+
+	<Import Project="..\AllProjects.proj.xml" />
+	<Import Project="..\BannedApiAnalyzers.proj.xml" />
+
+	<ItemGroup>
+		<ProjectReference Include="..\..\MikeNakis.Kit\MikeNakis.Kit\MikeNakis.Kit.csproj" />
+		<ProjectReference Include="..\..\Solution\Framework\Framework.csproj" />
+		<ProjectReference Include="..\..\Solution\Testing\Testing.csproj" />
+		<ProjectReference Include="..\Blaster\Blaster.csproj" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<Using Static="True" Include="MikeNakis.Kit.GlobalStatics" />
+	</ItemGroup>
+
+</Project>
