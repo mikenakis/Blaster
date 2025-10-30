@@ -59,4 +59,5 @@ public interface IFileSystem
 	string ReadAllText( Path path ) => DotNetHelpers.BomlessUtf8.GetString( ReadAllBytes( path ) );
 	void WriteAllText( Path path, string text ) => WriteAllBytes( path, DotNetHelpers.BomlessUtf8.GetBytes( text ) );
 	void Copy( Path path, IFileSystem targetFileSystem, Path targetPath ) => targetFileSystem.WriteAllBytes( targetPath, ReadAllBytes( path ) );
+	string GetDiagnosticFullPath( Path path );
 }

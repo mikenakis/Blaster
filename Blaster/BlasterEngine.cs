@@ -1,6 +1,6 @@
 namespace Blaster;
 
-using System.Collections.Immutable;
+using Framework.Codecs;
 using MarkdigExtensions;
 using MikeNakis.Kit;
 using MikeNakis.Kit.Collections;
@@ -11,25 +11,193 @@ using Html = HtmlAgilityPack;
 using Markdig = Markdig;
 using MarkdigSyntax = Markdig.Syntax;
 
-sealed class View
-{
-	public readonly View? Parent;
-	public readonly Html.HtmlNode Element;
-
-	public View( View? parent, Html.HtmlNode element )
-	{
-		Parent = parent;
-		Element = element;
-	}
-}
-
 public sealed class BlasterEngine
 {
-	public static void Run( IFileSystem contentFileSystem, IFileSystem templateFileSystem, IFileSystem targetFileSystem )
+	const string contentViewTagName = "content-view";
+	const string collectionViewTagName = "collection-view";
+	const string elementViewAttributeName = "element-view";
+	const string nameAttributeName = "name";
+	const string appliesToAttributeName = "applies-to";
+
+	readonly struct Name : Sys.IComparable<Name>, Sys.IEquatable<Name>
 	{
-		string template = templateFileSystem.ReadAllText( IFileSystem.Path.Of( "template.html" ) );
-		ImmutableArray<View> views = collectViews( template );
-		printTree( views[0], view => views.Where( v => v.Parent == view ), view => view.Element!.Name, s => Log.Info( s ) );
+		public static bool operator ==( Name left, Name right ) => left.Equals( right );
+		public static bool operator !=( Name left, Name right ) => !left.Equals( right );
+
+		public static Name Of( string content )
+		{
+			return new Name( content );
+		}
+
+		public static readonly Codec<Name> Codec = new StringRepresentationCodec<Name>( s => new Name( s ), k => k.Content );
+
+		public string Content { get; init; }
+
+		Name( string content )
+		{
+			Content = content;
+		}
+
+		public int CompareTo( Name other ) => StringCompare( Content, other.Content );
+		[Sys.Obsolete] public override bool Equals( object? other ) => other is Name kin && Equals( kin );
+		public override int GetHashCode() => Content.GetHashCode( Sys.StringComparison.Ordinal );
+		public bool Equals( Name other ) => CompareTo( other ) == 0;
+		public override string ToString() => Content;
+	}
+
+	abstract class View
+	{
+		public readonly View? Parent;
+		public readonly Html.HtmlNode HtmlNode;
+		public readonly Name Name;
+		readonly RegEx.Regex appliesTo;
+
+		protected View( View? parent, Html.HtmlNode htmlNode, Name name, RegEx.Regex appliesTo )
+		{
+			Parent = parent;
+			HtmlNode = htmlNode;
+			Name = name;
+			this.appliesTo = appliesTo;
+		}
+
+		public virtual bool IsApplicableTo( ViewModel viewModel )
+		{
+			return appliesTo.IsMatch( viewModel.Path.Content );
+		}
+
+		public abstract string Apply( ViewModel viewModel );
+
+		public override string ToString() => $"{GetType().Name} \"{Name}\"";
+	}
+
+	sealed class ContentView : View
+	{
+		public readonly TemplateEngine TemplateEngine;
+
+		public ContentView( View? parent, Html.HtmlNode htmlNode, Name name, RegEx.Regex appliesTo )
+			: base( parent, htmlNode, name, appliesTo )
+		{
+			Assert( htmlNode.Name is contentViewTagName or "#document" );
+			TemplateEngine = TemplateEngine.Create( htmlNode.InnerHtml );
+		}
+
+		public override bool IsApplicableTo( ViewModel viewModel )
+		{
+			if( viewModel is not ContentViewModel )
+				return false;
+			return base.IsApplicableTo( viewModel );
+		}
+
+		public override string Apply( ViewModel viewModel )
+		{
+			ContentViewModel contentViewModel = (ContentViewModel)viewModel;
+			return TemplateEngine.GenerateText( name => name switch
+				{
+					"title" => contentViewModel.Path.Content,
+					"content" => contentViewModel.HtmlText,
+					_ => "?"
+				} );
+		}
+	}
+
+	sealed class CollectionView : View
+	{
+		public readonly Name ElementViewName;
+
+		public CollectionView( View? parent, Html.HtmlNode htmlNode, Name name, RegEx.Regex appliesTo, Name elementViewName )
+			: base( parent, htmlNode, name, appliesTo )
+		{
+			Assert( htmlNode.Name == collectionViewTagName );
+			ElementViewName = elementViewName;
+		}
+
+		public override bool IsApplicableTo( ViewModel viewModel )
+		{
+			if( viewModel is not CollectionViewModel )
+				return false;
+			return base.IsApplicableTo( viewModel );
+		}
+
+		public override string Apply( ViewModel viewModel )
+		{
+			CollectionViewModel collectionViewModel = (CollectionViewModel)viewModel;
+			return collectionViewModel.Path.Content; //XXX
+		}
+	}
+
+	abstract class ViewModel
+	{
+		public readonly IFileSystem.Path Path;
+
+		protected ViewModel( IFileSystem.Path path )
+		{
+			Path = path;
+		}
+
+		public override string ToString() => $"{GetType().Name} \"{Path}\"";
+	}
+
+	sealed class ContentViewModel : ViewModel
+	{
+		public readonly string HtmlText;
+
+		public ContentViewModel( IFileSystem.Path path, string htmlText )
+			: base( path )
+		{
+			HtmlText = htmlText;
+		}
+	}
+
+	sealed class CollectionViewModel : ViewModel
+	{
+		public readonly ImmutableArray<IFileSystem.Path> Paths;
+
+		public CollectionViewModel( IFileSystem.Path path, ImmutableArray<IFileSystem.Path> paths )
+			: base( path )
+		{
+			Paths = paths;
+		}
+	}
+
+	public class DiagnosticMessage
+	{
+		public string SourceFilePathName { get; }
+		public int LineNumber { get; }
+		public int ColumnNumber { get; }
+		public string LineText { get; }
+		public string Message { get; }
+
+		public DiagnosticMessage( string sourceFilePathName, int lineNumber, int columnNumber, string lineText, string message )
+		{
+			SourceFilePathName = sourceFilePathName;
+			LineNumber = lineNumber;
+			ColumnNumber = columnNumber;
+			LineText = lineText;
+			Message = message;
+		}
+	}
+
+	public static readonly Sys.Action<DiagnosticMessage> DefaultDiagnosticMessageConsumer = diagnosticMessage =>
+	{
+		d( $"{diagnosticMessage.SourceFilePathName}({diagnosticMessage.LineNumber},{diagnosticMessage.ColumnNumber}): {diagnosticMessage.Message}" );
+		d( $"    {diagnosticMessage.LineText}" );
+		d( $"    {new string( ' ', diagnosticMessage.ColumnNumber )}^" );
+		return;
+
+		static void d( string s )
+		{
+			Log.Info( s );
+		}
+	};
+
+	public static void Run( IFileSystem contentFileSystem, IFileSystem templateFileSystem, IFileSystem targetFileSystem, Sys.Action<DiagnosticMessage> diagnosticMessageConsumer )
+	{
+		ImmutableArray<View> views = getViews( templateFileSystem, diagnosticMessageConsumer );
+		Assert( views.Length > 0 );
+		Assert( views[0].Name == Name.Of( "root" ) );
+		Assert( views[0] is ContentView );
+		Assert( ((ContentView)views[0]).TemplateEngine.FieldNames.Contains( "content" ) );
+		printTree( views[0], view => views.Where( v => v.Parent == view ), view => view.HtmlNode!.Name, s => Log.Info( s ) );
 
 		foreach( IFileSystem.Path contentPath in contentFileSystem.EnumerateItems() )
 		{
@@ -38,30 +206,138 @@ public sealed class BlasterEngine
 			if( contentPath.Extension != ".md" )
 			{
 				contentFileSystem.Copy( contentPath, targetFileSystem, contentPath );
+				continue;
 			}
-			else
-			{
-				string markdownText = contentFileSystem.ReadAllText( contentPath );
+			ViewModel viewModel = getViewModel( contentPath, contentFileSystem );
+			View view = findView( viewModel, views );
+			string htmlText = view.Apply( viewModel );
+			targetFileSystem.WriteAllText( contentPath.WithExtension( ".html" ), htmlText );
+		}
+	}
 
-				if( markdownText.IsWhitespace() )
+	static ImmutableArray<View> getViews( IFileSystem templateFileSystem, Sys.Action<DiagnosticMessage> diagnosticMessageConsumer )
+	{
+		IFileSystem.Path templatePath = IFileSystem.Path.Of( "template.html" );
+		string template = templateFileSystem.ReadAllText( templatePath );
+		string diagnosticTemplatePathName = templateFileSystem.GetDiagnosticFullPath( templatePath );
+		Html.HtmlDocument templateDocument = new Html.HtmlDocument();
+		templateDocument.LoadHtml( template );
+		foreach( Html.HtmlParseError parseError in templateDocument.ParseErrors )
+			diagnosticMessageConsumer.Invoke( new DiagnosticMessage( diagnosticTemplatePathName, parseError.Line, parseError.LinePosition, parseError.SourceText, parseError.Reason ) );
+		Html.HtmlNode rootNode = templateDocument.DocumentNode;
+		List<View> allViews = new List<View>();
+		View rootView = new ContentView( null, rootNode, Name.Of( "root" ), new RegEx.Regex( ".*" ) );
+		allViews.Add( rootView );
+		recurse( rootView, rootNode, allViews, diagnosticMessageConsumer, diagnosticTemplatePathName );
+		foreach( View view in allViews )
+			view.HtmlNode.Remove();
+		return allViews.ToImmutableArray();
+
+		static void recurse( View parentView, Html.HtmlNode parentNode, List<View> allViews, Sys.Action<DiagnosticMessage> diagnosticMessageConsumer, string diagnosticTemplatePathName )
+		{
+			foreach( Html.HtmlNode childNode in parentNode.ChildNodes )
+			{
+				View? childView = createChildView( parentView, childNode, diagnosticMessageConsumer, diagnosticTemplatePathName );
+				if( childView != null )
+					allViews.Add( childView );
+				recurse( childView ?? parentView, childNode, allViews, diagnosticMessageConsumer, diagnosticTemplatePathName );
+			}
+
+			static View? createChildView( View parentView, Html.HtmlNode htmlNode, Sys.Action<DiagnosticMessage> diagnosticMessageConsumer, string diagnosticTemplatePathName )
+			{
+				if( htmlNode.Name == contentViewTagName )
 				{
-					SysText.StringBuilder stringBuilder = new();
-					foreach( IFileSystem.Path childPath in contentFileSystem.EnumerateItems( contentPath ) )
-					{
-						if( !childPath.Content.EndsWith2( ".md" ) )
-							continue;
-						stringBuilder.Append( '[' ).Append( childPath.Content ).Append( "](" ).Append( childPath.Content ).Append( ")\r\n\r\n" );
-					}
-					markdownText = stringBuilder.ToString();
+					Name name = getName( htmlNode );
+					RegEx.Regex appliesTo = getAppliesTo( htmlNode );
+					return new ContentView( parentView, htmlNode, name, appliesTo );
+				}
+				if( htmlNode.Name == collectionViewTagName )
+				{
+					Name name = getName( htmlNode );
+					RegEx.Regex appliesTo = getAppliesTo( htmlNode );
+					Name elementViewName = getElementViewName( htmlNode, diagnosticMessageConsumer, diagnosticTemplatePathName );
+					return new CollectionView( parentView, htmlNode, name, appliesTo, elementViewName );
+				}
+				return null;
+
+				static Name getName( Html.HtmlNode htmlNode )
+				{
+					Html.HtmlAttribute? nameAttribute = htmlNode.Attributes.AttributesWithName( nameAttributeName ).SingleOrDefault();
+					return Name.Of( nameAttribute?.Value ?? htmlNode.XPath );
 				}
 
-				string htmlText = convert( markdownText );
-				htmlText = fixLinks( htmlText );
+				static RegEx.Regex getAppliesTo( Html.HtmlNode htmlNode )
+				{
+					Html.HtmlAttribute? appliesToAttribute = htmlNode.Attributes.AttributesWithName( appliesToAttributeName ).SingleOrDefault();
+					return new RegEx.Regex( appliesToAttribute?.Value ?? ".*" );
+				}
 
-				IFileSystem.Path targetPath = contentPath.WithExtension( ".html" );
-				targetFileSystem.WriteAllText( targetPath, htmlText );
+				static Name getElementViewName( Html.HtmlNode htmlNode, Sys.Action<DiagnosticMessage> diagnosticMessageConsumer, string diagnosticTemplatePathName )
+				{
+					Html.HtmlAttribute? elementViewAttribute = htmlNode.Attributes.AttributesWithName( elementViewAttributeName ).SingleOrDefault();
+					if( elementViewAttribute == null )
+					{
+						diagnosticMessageConsumer.Invoke( new DiagnosticMessage( diagnosticTemplatePathName, htmlNode.Line, htmlNode.LinePosition, "", $"Collection view is missing a '{elementViewAttributeName}' attribute" ) );
+						return Name.Of( "" );
+					}
+					return Name.Of( elementViewAttribute.Value );
+				}
 			}
 		}
+	}
+
+	static ViewModel getViewModel( IFileSystem.Path contentPath, IFileSystem contentFileSystem )
+	{
+		string markdownText = contentFileSystem.ReadAllText( contentPath );
+
+		if( markdownText.IsWhitespace() )
+		{
+			SysText.StringBuilder stringBuilder = new();
+			ImmutableArray<IFileSystem.Path> paths = contentFileSystem.EnumerateItems( contentPath ).Where( childPath => childPath.Content.EndsWith2( ".md" ) ).ToImmutableArray();
+			return new CollectionViewModel( contentPath, paths );
+		}
+
+		string htmlText = convert( markdownText );
+		htmlText = fixLinks( htmlText );
+		return new ContentViewModel( contentPath, htmlText );
+	}
+
+	static readonly View anyContentView = createAnyContentView();
+
+	static readonly View anyCollectionView = createAnyCollectionView();
+
+	static View createAnyContentView()
+	{
+		Html.HtmlDocument htmlDocument = new();
+		Html.HtmlNode htmlNode = new( Html.HtmlNodeType.Element, htmlDocument, 0 );
+		htmlNode.Name = contentViewTagName;
+		htmlNode.InnerHtml = "{{content}}";
+		return new ContentView( null, htmlNode, Name.Of( "anyContent" ), new RegEx.Regex( ".*" ) );
+	}
+
+	static View createAnyCollectionView()
+	{
+		Html.HtmlDocument htmlDocument = new();
+		Html.HtmlNode htmlNode = new( Html.HtmlNodeType.Element, htmlDocument, 0 );
+		htmlNode.Name = collectionViewTagName;
+		htmlNode.InnerHtml = "{{content}}";
+		return new CollectionView( null, htmlNode, Name.Of( "anyCollection" ), new RegEx.Regex( ".*" ), Name.Of( "anyContent" ) );
+	}
+
+	static View findView( ViewModel viewModel, ImmutableArray<View> views )
+	{
+		IEnumerable<View> visibleViews = views.Where( view => view.Parent == null ).Collect();
+		IReadOnlyList<View> applicableViews = visibleViews.Where( a => a.IsApplicableTo( viewModel ) ).Collect();
+		if( applicableViews.Count == 0 )
+			return viewModel switch
+			{
+				ContentViewModel => anyContentView,
+				CollectionViewModel => anyCollectionView,
+				_ => throw new AssertionFailureException()
+			};
+		if( applicableViews.Count > 1 )
+			Log.Warn( $"More than one view is applicable to {viewModel}" );
+		return applicableViews[0];
 	}
 
 	static string fixLinks( string htmlText )
@@ -85,37 +361,6 @@ public sealed class BlasterEngine
 			}
 		}
 		return htmlDocument.DocumentNode.OuterHtml;
-	}
-
-	static ImmutableArray<View> collectViews( string template )
-	{
-		Html.HtmlDocument templateDocument = new Html.HtmlDocument();
-		templateDocument.LoadHtml( template );
-		Html.HtmlNode rootNode = templateDocument.DocumentNode;
-		View rootView = new View( null, rootNode );
-		List<View> allViews = new List<View>();
-		allViews.Add( rootView );
-		recurse( rootView, rootNode, allViews );
-		foreach( View view in allViews )
-			view.Element.Remove();
-		return allViews.ToImmutableArray();
-
-		static void recurse( View parentView, Html.HtmlNode parentNode, List<View> allViews )
-		{
-			foreach( Html.HtmlNode childNode in parentNode.ChildNodes )
-			{
-				if( childNode.Name == "section" )
-				{
-					View childView = new View( parentView, childNode );
-					allViews.Add( childView );
-					recurse( childView, childNode, allViews );
-				}
-				else
-				{
-					recurse( parentView, childNode, allViews );
-				}
-			}
-		}
 	}
 
 	static string convert( string markdownText )

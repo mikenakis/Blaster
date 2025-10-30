@@ -38,7 +38,7 @@ public class HttpServer : Sys.IDisposable
 		{
 			listener.Prefixes.Add( url );
 			listener.Start();
-			Sys.Console.WriteLine( "Listening on {0}", url );
+			Log.Info( "Listening on {0}", url );
 
 			while( true )
 			{
@@ -76,11 +76,11 @@ public class HttpServer : Sys.IDisposable
 
 	(int statusCode, string statusDescription) process( SysNet.HttpListenerRequest request, SysNet.HttpListenerResponse response )
 	{
-		Sys.Console.WriteLine( $"{request.HttpMethod} {request.Url}" );
+		Log.Info( $"{request.HttpMethod} {request.Url}" );
 		Assert( request.IsLocal );
 		if( request.HttpMethod != "GET" )
 		{
-			Sys.Console.WriteLine( $"Unknown HTTP method '{request.HttpMethod}'." );
+			Log.Info( $"Unknown HTTP method '{request.HttpMethod}'." );
 			return (405, "Method not allowed");
 		}
 
@@ -88,7 +88,7 @@ public class HttpServer : Sys.IDisposable
 		FilePath filePath = webRoot.RelativeFile( localPath );
 		if( !filePath.Exists() )
 		{
-			Sys.Console.WriteLine( $"File not found: '{localPath}'." );
+			Log.Info( $"File not found: '{localPath}'." );
 			return (404, "Not Found");
 		}
 

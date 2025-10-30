@@ -25,7 +25,7 @@ public sealed class BlasterMain
 		IFileSystem templateFileSystem = new HybridFileSystem( templateDirectoryPath );
 		IFileSystem targetFileSystem = new HybridFileSystem( targetDirectoryPath );
 
-		BlasterEngine.Run( contentFileSystem, templateFileSystem, targetFileSystem );
+		BlasterEngine.Run( contentFileSystem, templateFileSystem, targetFileSystem, BlasterEngine.DefaultDiagnosticMessageConsumer );
 		//Sys.Console.Write( "Press [Enter] to terminate: " );
 		HttpServer.Run( targetDirectoryPath );
 	}

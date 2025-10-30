@@ -33,7 +33,7 @@ public class T101_BlasterTests : TestClass
 </html>
 """ );
 		IFileSystem targetFileSystem = new FakeFileSystem( fakeClock, testFilesDirectoryPath.Directory( "target" ) );
-		BlasterEngine.Run( sourceFileSystem, templateFileSystem, targetFileSystem );
+		BlasterEngine.Run( sourceFileSystem, templateFileSystem, targetFileSystem, BlasterEngine.DefaultDiagnosticMessageConsumer );
 	}
 
 	static DirectoryPath getTestDirectory( [SysCompiler.CallerFilePath] string callerFilePath = "" )

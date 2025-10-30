@@ -91,4 +91,9 @@ sealed class HybridFileSystem : IFileSystem
 	{
 		return Root.RelativeFile( path.Content );
 	}
+
+	public string GetDiagnosticFullPath( IFileSystem.Path path )
+	{
+		return filePathFromPathName( path ).Path;
+	}
 }

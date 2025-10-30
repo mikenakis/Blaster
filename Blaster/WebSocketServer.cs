@@ -15,10 +15,10 @@ static class WebSocketServer
 		var server = new SysSockets.TcpListener( SysNet.IPAddress.Parse( ip ), port );
 
 		server.Start();
-		Sys.Console.WriteLine( "Server has started on {0}:{1}, Waiting for a connection…", ip, port );
+		Log.Info( "Server has started on {0}:{1}, Waiting for a connection…", ip, port );
 
 		SysSockets.TcpClient client = server.AcceptTcpClient();
-		Sys.Console.WriteLine( "A client connected." );
+		Log.Info( "A client connected." );
 
 		SysSockets.NetworkStream stream = client.GetStream();
 
@@ -36,7 +36,7 @@ static class WebSocketServer
 
 			if( RegEx.Regex.IsMatch( s, "^GET", RegEx.RegexOptions.IgnoreCase ) )
 			{
-				Sys.Console.WriteLine( "=====Handshaking from client=====\n{0}", s );
+				Log.Info( "=====Handshaking from client=====\n{0}", s );
 
 				// 1. Obtain the value of the "Sec-WebSocket-Key" request header without any leading or trailing whitespace
 				// 2. Concatenate it with "258EAFA5-E914-47DA-95CA-C5AB0DC85B11" (a special GUID specified by RFC 6455)
@@ -84,7 +84,7 @@ static class WebSocketServer
 
 				if( msgLen == 0 )
 				{
-					Sys.Console.WriteLine( "msgLen == 0" );
+					Log.Info( "msgLen == 0" );
 				}
 				else if( mask )
 				{
@@ -96,12 +96,10 @@ static class WebSocketServer
 						decoded[i] = (byte)(bytes[offset + i] ^ masks[i % 4]);
 
 					string text = DotNetHelpers.BomlessUtf8.GetString( decoded );
-					Sys.Console.WriteLine( "{0}", text );
+					Log.Info( "{0}", text );
 				}
 				else
-					Sys.Console.WriteLine( "mask bit not set" );
-
-				Sys.Console.WriteLine();
+					Log.Info( "mask bit not set" );
 			}
 		}
 	}

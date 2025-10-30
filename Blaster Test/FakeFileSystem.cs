@@ -73,4 +73,11 @@ sealed class FakeFileSystem : IFileSystem
 		if( persistenceDirectoryPath != null )
 			persistenceDirectoryPath.RelativeFile( path.Content ).WriteAllBytes( bytes );
 	}
+
+	public string GetDiagnosticFullPath( IFileSystem.Path path )
+	{
+		if( persistenceDirectoryPath != null )
+			return persistenceDirectoryPath.RelativeFile( path.Content ).Path;
+		return path.Content;
+	}
 }
