@@ -15,7 +15,7 @@ public sealed class BlasterMain
 		Sys.Console.WriteLine( $"INFO: Content: {contentDirectoryPath}" );
 		DirectoryPath templateDirectoryPath = DirectoryPath.FromAbsolutePath( @"C:\Users\MBV\Personal\Documents\digital-garden\michael.gr-blaster-files" );
 		Sys.Console.WriteLine( $"INFO: Template: {templateDirectoryPath}" );
-		DirectoryPath targetDirectoryPath = DotNetHelpers.GetTempDirectoryPath().Directory( "blaster-publish" );
+		DirectoryPath targetDirectoryPath = DirectoryPath.FromAbsolutePath( @"C:\Users\MBV\Personal\Documents\digital-garden\michael.gr-blaster-publish" );
 		Sys.Console.WriteLine( $"INFO: Target: {targetDirectoryPath}" );
 
 		HybridFileSystem contentFileSystem = new HybridFileSystem( contentDirectoryPath );
@@ -26,7 +26,5 @@ public sealed class BlasterMain
 		IFileSystem targetFileSystem = new HybridFileSystem( targetDirectoryPath );
 
 		BlasterEngine.Run( contentFileSystem, templateFileSystem, targetFileSystem, BlasterEngine.DefaultDiagnosticMessageConsumer );
-		//Sys.Console.Write( "Press [Enter] to terminate: " );
-		HttpServer.Run( targetDirectoryPath );
 	}
 }

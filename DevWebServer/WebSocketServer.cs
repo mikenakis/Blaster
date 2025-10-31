@@ -1,4 +1,4 @@
-namespace Blaster;
+namespace DevWebServer;
 
 using MikeNakis.Kit;
 
@@ -83,9 +83,7 @@ static class WebSocketServer
 				}
 
 				if( msgLen == 0 )
-				{
 					Log.Info( "msgLen == 0" );
-				}
 				else if( mask )
 				{
 					byte[] decoded = new byte[msgLen];

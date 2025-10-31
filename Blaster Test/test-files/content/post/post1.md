@@ -1,1 +1,1 @@
-This is post1
+This is /post/post1.md

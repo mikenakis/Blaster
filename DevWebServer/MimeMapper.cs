@@ -1,4 +1,4 @@
-namespace Blaster;
+namespace DevWebServer;
 
 using MikeNakis.Kit.FileSystem;
 

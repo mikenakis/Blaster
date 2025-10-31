@@ -5,7 +5,7 @@ using MikeNakis.Kit.Extensions;
 using MikeNakis.Kit.FileSystem;
 using static MikeNakis.Kit.GlobalStatics;
 
-sealed class HybridFileSystem : IFileSystem
+public sealed class HybridFileSystem : IFileSystem
 {
 	sealed class Item
 	{

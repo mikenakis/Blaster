@@ -192,8 +192,19 @@ public sealed class BlasterEngine
 
 	public static void Run( IFileSystem contentFileSystem, IFileSystem templateFileSystem, IFileSystem targetFileSystem, Sys.Action<DiagnosticMessage> diagnosticMessageConsumer )
 	{
-		ImmutableArray<View> views = getViews( templateFileSystem, diagnosticMessageConsumer );
-		Assert( views.Length > 0 );
+		List<View> views = new List<View>();
+		foreach( IFileSystem.Path contentPath in templateFileSystem.EnumerateItems() )
+		{
+			if( contentPath.Extension != ".html" )
+			{
+				templateFileSystem.Copy( contentPath, targetFileSystem, contentPath );
+				continue;
+			}
+			extractViews( templateFileSystem, contentPath, views, diagnosticMessageConsumer );
+		}
+
+		//ImmutableArray<View> views = getViews( templateFileSystem, diagnosticMessageConsumer );
+		Assert( views.Count > 0 );
 		Assert( views[0].Name == Name.Of( "root" ) );
 		Assert( views[0] is ContentView );
 		Assert( ((ContentView)views[0]).TemplateEngine.FieldNames.Contains( "content" ) );
@@ -215,9 +226,8 @@ public sealed class BlasterEngine
 		}
 	}
 
-	static ImmutableArray<View> getViews( IFileSystem templateFileSystem, Sys.Action<DiagnosticMessage> diagnosticMessageConsumer )
+	static void extractViews( IFileSystem templateFileSystem, IFileSystem.Path templatePath, List<View> allViews, Sys.Action<DiagnosticMessage> diagnosticMessageConsumer )
 	{
-		IFileSystem.Path templatePath = IFileSystem.Path.Of( "template.html" );
 		string template = templateFileSystem.ReadAllText( templatePath );
 		string diagnosticTemplatePathName = templateFileSystem.GetDiagnosticFullPath( templatePath );
 		Html.HtmlDocument templateDocument = new Html.HtmlDocument();
@@ -225,13 +235,12 @@ public sealed class BlasterEngine
 		foreach( Html.HtmlParseError parseError in templateDocument.ParseErrors )
 			diagnosticMessageConsumer.Invoke( new DiagnosticMessage( diagnosticTemplatePathName, parseError.Line, parseError.LinePosition, parseError.SourceText, parseError.Reason ) );
 		Html.HtmlNode rootNode = templateDocument.DocumentNode;
-		List<View> allViews = new List<View>();
 		View rootView = new ContentView( null, rootNode, Name.Of( "root" ), new RegEx.Regex( ".*" ) );
 		allViews.Add( rootView );
 		recurse( rootView, rootNode, allViews, diagnosticMessageConsumer, diagnosticTemplatePathName );
 		foreach( View view in allViews )
 			view.HtmlNode.Remove();
-		return allViews.ToImmutableArray();
+		return;
 
 		static void recurse( View parentView, Html.HtmlNode parentNode, List<View> allViews, Sys.Action<DiagnosticMessage> diagnosticMessageConsumer, string diagnosticTemplatePathName )
 		{
@@ -286,6 +295,77 @@ public sealed class BlasterEngine
 		}
 	}
 
+	//static ImmutableArray<View> getViews( IFileSystem templateFileSystem, Sys.Action<DiagnosticMessage> diagnosticMessageConsumer )
+	//{
+	//	IFileSystem.Path templatePath = IFileSystem.Path.Of( "template.html" );
+	//	string template = templateFileSystem.ReadAllText( templatePath );
+	//	string diagnosticTemplatePathName = templateFileSystem.GetDiagnosticFullPath( templatePath );
+	//	Html.HtmlDocument templateDocument = new Html.HtmlDocument();
+	//	templateDocument.LoadHtml( template );
+	//	foreach( Html.HtmlParseError parseError in templateDocument.ParseErrors )
+	//		diagnosticMessageConsumer.Invoke( new DiagnosticMessage( diagnosticTemplatePathName, parseError.Line, parseError.LinePosition, parseError.SourceText, parseError.Reason ) );
+	//	Html.HtmlNode rootNode = templateDocument.DocumentNode;
+	//	List<View> allViews = new List<View>();
+	//	View rootView = new ContentView( null, rootNode, Name.Of( "root" ), new RegEx.Regex( ".*" ) );
+	//	allViews.Add( rootView );
+	//	recurse( rootView, rootNode, allViews, diagnosticMessageConsumer, diagnosticTemplatePathName );
+	//	foreach( View view in allViews )
+	//		view.HtmlNode.Remove();
+	//	return allViews.ToImmutableArray();
+
+	//	static void recurse( View parentView, Html.HtmlNode parentNode, List<View> allViews, Sys.Action<DiagnosticMessage> diagnosticMessageConsumer, string diagnosticTemplatePathName )
+	//	{
+	//		foreach( Html.HtmlNode childNode in parentNode.ChildNodes )
+	//		{
+	//			View? childView = createChildView( parentView, childNode, diagnosticMessageConsumer, diagnosticTemplatePathName );
+	//			if( childView != null )
+	//				allViews.Add( childView );
+	//			recurse( childView ?? parentView, childNode, allViews, diagnosticMessageConsumer, diagnosticTemplatePathName );
+	//		}
+
+	//		static View? createChildView( View parentView, Html.HtmlNode htmlNode, Sys.Action<DiagnosticMessage> diagnosticMessageConsumer, string diagnosticTemplatePathName )
+	//		{
+	//			if( htmlNode.Name == contentViewTagName )
+	//			{
+	//				Name name = getName( htmlNode );
+	//				RegEx.Regex appliesTo = getAppliesTo( htmlNode );
+	//				return new ContentView( parentView, htmlNode, name, appliesTo );
+	//			}
+	//			if( htmlNode.Name == collectionViewTagName )
+	//			{
+	//				Name name = getName( htmlNode );
+	//				RegEx.Regex appliesTo = getAppliesTo( htmlNode );
+	//				Name elementViewName = getElementViewName( htmlNode, diagnosticMessageConsumer, diagnosticTemplatePathName );
+	//				return new CollectionView( parentView, htmlNode, name, appliesTo, elementViewName );
+	//			}
+	//			return null;
+
+	//			static Name getName( Html.HtmlNode htmlNode )
+	//			{
+	//				Html.HtmlAttribute? nameAttribute = htmlNode.Attributes.AttributesWithName( nameAttributeName ).SingleOrDefault();
+	//				return Name.Of( nameAttribute?.Value ?? htmlNode.XPath );
+	//			}
+
+	//			static RegEx.Regex getAppliesTo( Html.HtmlNode htmlNode )
+	//			{
+	//				Html.HtmlAttribute? appliesToAttribute = htmlNode.Attributes.AttributesWithName( appliesToAttributeName ).SingleOrDefault();
+	//				return new RegEx.Regex( appliesToAttribute?.Value ?? ".*" );
+	//			}
+
+	//			static Name getElementViewName( Html.HtmlNode htmlNode, Sys.Action<DiagnosticMessage> diagnosticMessageConsumer, string diagnosticTemplatePathName )
+	//			{
+	//				Html.HtmlAttribute? elementViewAttribute = htmlNode.Attributes.AttributesWithName( elementViewAttributeName ).SingleOrDefault();
+	//				if( elementViewAttribute == null )
+	//				{
+	//					diagnosticMessageConsumer.Invoke( new DiagnosticMessage( diagnosticTemplatePathName, htmlNode.Line, htmlNode.LinePosition, "", $"Collection view is missing a '{elementViewAttributeName}' attribute" ) );
+	//					return Name.Of( "" );
+	//				}
+	//				return Name.Of( elementViewAttribute.Value );
+	//			}
+	//		}
+	//	}
+	//}
+
 	static ViewModel getViewModel( IFileSystem.Path contentPath, IFileSystem contentFileSystem )
 	{
 		string markdownText = contentFileSystem.ReadAllText( contentPath );
@@ -324,7 +404,7 @@ public sealed class BlasterEngine
 		return new CollectionView( null, htmlNode, Name.Of( "anyCollection" ), new RegEx.Regex( ".*" ), Name.Of( "anyContent" ) );
 	}
 
-	static View findView( ViewModel viewModel, ImmutableArray<View> views )
+	static View findView( ViewModel viewModel, IReadOnlyList<View> views )
 	{
 		IEnumerable<View> visibleViews = views.Where( view => view.Parent == null ).Collect();
 		IReadOnlyList<View> applicableViews = visibleViews.Where( a => a.IsApplicableTo( viewModel ) ).Collect();

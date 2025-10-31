@@ -1,4 +1,4 @@
-namespace Blaster;
+namespace DevWebServer;
 
 using MikeNakis.Kit;
 using MikeNakis.Kit.Extensions;
@@ -7,22 +7,20 @@ using static MikeNakis.Kit.GlobalStatics;
 
 public class HttpServer : Sys.IDisposable
 {
-	const string url = "http://localhost:8000/";
-
-	public static void Run( DirectoryPath webRoot )
+	public static void Run( string prefix, DirectoryPath webRoot )
 	{
-		using( HttpServer httpServer = new HttpServer( webRoot ) )
-		{
+		using( var httpServer = new HttpServer( prefix, webRoot ) )
 			httpServer.Run();
-		}
 	}
 
 	readonly LifeGuard lifeGuard = LifeGuard.Create();
 	readonly MimeMapper mimeMapper = new();
+	readonly string prefix;
 	readonly DirectoryPath webRoot;
 
-	public HttpServer( DirectoryPath webRoot )
+	public HttpServer( string prefix, DirectoryPath webRoot )
 	{
+		this.prefix = prefix;
 		this.webRoot = webRoot;
 	}
 
@@ -34,11 +32,11 @@ public class HttpServer : Sys.IDisposable
 
 	public void Run()
 	{
-		using( SysNet.HttpListener listener = new SysNet.HttpListener() )
+		using( var listener = new SysNet.HttpListener() )
 		{
-			listener.Prefixes.Add( url );
+			listener.Prefixes.Add( prefix );
 			listener.Start();
-			Log.Info( "Listening on {0}", url );
+			Log.Info( $"Listening on {prefix}" );
 
 			while( true )
 			{

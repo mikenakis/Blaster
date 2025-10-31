@@ -30,7 +30,7 @@ sealed class FakeFileSystem : IFileSystem
 	readonly DirectoryPath? persistenceDirectoryPath;
 	readonly Dictionary<IFileSystem.Path, Item> items = new();
 
-	public FakeFileSystem( Clock clock, DirectoryPath? persistenceDirectoryPath )
+	public FakeFileSystem( Clock clock, DirectoryPath? persistenceDirectoryPath = null )
 	{
 		this.clock = clock;
 		this.persistenceDirectoryPath = persistenceDirectoryPath;
