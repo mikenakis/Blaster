@@ -1,5 +1,6 @@
 namespace Blaster;
 
+using System.Collections.Immutable;
 using static MikeNakis.Kit.GlobalStatics;
 
 public sealed class TemplateEngine

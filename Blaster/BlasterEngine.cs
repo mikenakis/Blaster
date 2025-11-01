@@ -1,5 +1,6 @@
 namespace Blaster;
 
+using System.Collections.Immutable;
 using Framework.Codecs;
 using MarkdigExtensions;
 using MikeNakis.Kit;
