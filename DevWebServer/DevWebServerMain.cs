@@ -1,13 +1,12 @@
 namespace DevWebServer;
 
 using System.Collections.Immutable;
-using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Logging;
 using MikeNakis.Clio.Extensions;
-using MikeNakis.Console;
 using MikeNakis.Kit;
 using MikeNakis.Kit.FileSystem;
 using static MikeNakis.Kit.GlobalStatics;
@@ -17,8 +16,27 @@ public sealed class DevWebServerMain
 {
 	static void Main( string[] arguments )
 	{
-		StartupProjectDirectory.Initialize();
-		ConsoleHelpers.Run( false, () => run( arguments ) );
+		Clio.ArgumentParser argumentParser = new();
+		Clio.IPositionalArgument<string> prefixArgument = argumentParser.AddStringPositionalWithDefault( "prefix", "http://localhost:8000/", "The host name and port to serve" );
+		Clio.IPositionalArgument<string> webRootArgument = argumentParser.AddStringPositionalWithDefault( "web-root", ".", "The directory containing the files to serve" );
+		if( !argumentParser.TryParse( arguments ) )
+		{
+			Sys.Environment.Exit( -1 );
+			return;
+		}
+		DirectoryPath webRoot = DirectoryPath.FromAbsoluteOrRelativePath( webRootArgument.Value, DotNetHelpers.GetWorkingDirectoryPath() );
+		Sys.Console.WriteLine( $"Serving '{webRoot}'" );
+		Sys.Console.WriteLine( $"On '{prefixArgument.Value}'" );
+		WaitableEvent waitableEvent = new();
+		using Hysterizer hysterizer = new( Sys.TimeSpan.FromSeconds( 0.5 ), () =>
+		{
+			Sys.Console.WriteLine( "Change detected." );
+			waitableEvent.Trigger();
+		} );
+		startFileSystemWatcher( webRoot, hysterizer.Action );
+		startWebServer( webRoot, waitableEvent );
+		Sys.Console.WriteLine( "Press [Enter] to terminate: " );
+		Sys.Console.ReadLine();
 	}
 
 	sealed class WaitableEvent
@@ -44,38 +62,16 @@ public sealed class DevWebServerMain
 		}
 	}
 
-	static int run( string[] arguments )
-	{
-		Clio.ArgumentParser argumentParser = new();
-		Clio.IPositionalArgument<string> prefixArgument = argumentParser.AddStringPositionalWithDefault( "prefix", "http://localhost:8000/", "The host name and port to serve" );
-		Clio.IPositionalArgument<string> webRootArgument = argumentParser.AddStringPositionalWithDefault( "web-root", ".", "The directory containing the files to serve" );
-		if( !argumentParser.TryParse( arguments ) )
-			return -1;
-		DirectoryPath webRoot = DirectoryPath.FromAbsoluteOrRelativePath( webRootArgument.Value, DotNetHelpers.GetWorkingDirectoryPath() );
-		Sys.Console.WriteLine( $"Serving '{webRoot}'" );
-		Sys.Console.WriteLine( $"On '{prefixArgument.Value}'" );
-		WaitableEvent waitableEvent = new();
-		using Hysterizer hysterizer = new( Sys.TimeSpan.FromSeconds( 1 ), waitableEvent.Trigger );
-		SysIo.FileSystemWatcher fileSystemWatcher = startFileSystemWatcher( webRoot, hysterizer.Action );
-		startWebServer( webRoot, waitableEvent );
-		Sys.Console.Write( "Press [Enter] to terminate: " );
-		Sys.Console.ReadLine();
-		Identity( fileSystemWatcher );
-		return 0;
-	}
-
 	static SysIo.FileSystemWatcher startFileSystemWatcher( DirectoryPath directoryPath, Sys.Action waitableTaskTrigegr )
 	{
 		SysIo.FileSystemWatcher fileSystemWatcher = new();
 		fileSystemWatcher.Path = directoryPath.Path;
 		fileSystemWatcher.IncludeSubdirectories = true;
 		//fileSystemWatcher.Filter                = "*";
-		fileSystemWatcher.NotifyFilter = SysIo.NotifyFilters.FileName |
+		fileSystemWatcher.NotifyFilter = SysIo.NotifyFilters.FileName | //SysIo.NotifyFilters.Attributes | SysIo.NotifyFilters.LastAccess |
 				SysIo.NotifyFilters.DirectoryName | //
-													//SysIo.NotifyFilters.Attributes |
 				SysIo.NotifyFilters.Size |
 				SysIo.NotifyFilters.LastWrite |
-				//SysIo.NotifyFilters.LastAccess | //
 				SysIo.NotifyFilters.CreationTime |
 				SysIo.NotifyFilters.Security;
 		fileSystemWatcher.Changed += onFileSystemWatcherNormalEvent;
@@ -89,7 +85,7 @@ public sealed class DevWebServerMain
 		void onFileSystemWatcherNormalEvent( object sender, SysIo.FileSystemEventArgs e )
 		{
 			Assert( sender == fileSystemWatcher );
-			Log.Debug( $"{e.ChangeType} {e.FullPath}" );
+			//Log.Debug( $"{e.ChangeType} {e.FullPath}" );
 			waitableTaskTrigegr.Invoke();
 		}
 
@@ -105,7 +101,7 @@ public sealed class DevWebServerMain
 		readonly LifeGuard lifeGuard = LifeGuard.Create();
 		readonly Sys.TimeSpan delay;
 		readonly Sys.Action action;
-		bool pending;
+		volatile bool pending;
 
 		public Hysterizer( Sys.TimeSpan delay, Sys.Action action )
 		{
@@ -141,6 +137,8 @@ public sealed class DevWebServerMain
 		//     https://www.tabsoverspaces.com/233883-simple-websocket-client-and-server-application-using-dotnet
 		WebApplicationBuilder builder = WebApplication.CreateBuilder( new WebApplicationOptions() { WebRootPath = webRoot.Path } );
 		builder.WebHost.UseUrls( "http://localhost:8080" );
+		builder.Logging.ClearProviders();
+		builder.Logging.AddDebug();
 		WebApplication app = builder.Build();
 		app.UseWebSockets();
 		app.UseHostFiltering();
@@ -148,7 +146,7 @@ public sealed class DevWebServerMain
 		app.UseStaticFiles( new StaticFileOptions() { ServeUnknownFileTypes = true } );
 		app.Use( async ( context, next ) =>
 		{
-			if( context.Request.Path == "/ws" )
+			if( context.Request.Path == "/live-reload-websocket" )
 			{
 				await doWebSocket( context, waitableEvent );
 				return;
@@ -172,13 +170,29 @@ public sealed class DevWebServerMain
 		}
 		using( SysNetWebSock.WebSocket webSocket = await context.WebSockets.AcceptWebSocketAsync() )
 		{
+#pragma warning disable CS4014 // Because this call is not awaited, execution of the current method continues before the call is completed
+			Task.Run( async () =>
+			{
+				byte[] buffer = new byte[16];
+				while( true )
+				{
+					SysNetWebSock.WebSocketReceiveResult result = await webSocket.ReceiveAsync( buffer, SysThread.CancellationToken.None );
+					if( result.MessageType == SysNetWebSock.WebSocketMessageType.Close )
+					{
+						Log.Debug( $"Socket closed: {result.CloseStatus} {result.CloseStatusDescription}" );
+						break;
+					}
+				}
+			} );
+#pragma warning restore CS4014 // Because this call is not awaited, execution of the current method continues before the call is completed
 			while( true )
 			{
 				await waitableEvent.Wait();
-				Log.Debug( "Sending event..." );
-				Sys.DateTime currentTime = DotNetClock.Instance.GetUniversalTime();
-				await webSocket.SendAsync( SysText.Encoding.ASCII.GetBytes( $"Test - {currentTime}" ), //
-					SysNetWebSock.WebSocketMessageType.Text, true, CancellationToken.None );
+				if( webSocket.State != SysNetWebSock.WebSocketState.Open )
+					break;
+				Log.Debug( "Sending refresh message..." );
+				byte[] bytes = SysText.Encoding.ASCII.GetBytes( "refresh" );
+				await webSocket.SendAsync( bytes, SysNetWebSock.WebSocketMessageType.Text, true, SysThread.CancellationToken.None );
 			}
 		}
 	}
