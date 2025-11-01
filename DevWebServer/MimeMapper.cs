@@ -36,9 +36,6 @@ sealed class MimeMapper
 		addMapping( ".msi", "application/octet-stream" );
 		addMapping( ".pdf", "application/pdf" );
 		addMapping( ".png", "image/png" );
-		addMapping( ".qt", "video/quicktime" );
-		addMapping( ".rar", "application/octet-stream" );
-		addMapping( ".rtf", "application/rtf" );
 		addMapping( ".svg", "image/svg+xml" );
 		addMapping( ".tar", "application/x-tar" );
 		addMapping( ".tgz", "application/x-compressed" );

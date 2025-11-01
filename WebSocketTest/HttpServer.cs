@@ -1,4 +1,4 @@
-namespace DevWebServer;
+namespace WebSocketTest;
 
 using MikeNakis.Kit;
 using MikeNakis.Kit.Extensions;
@@ -8,7 +8,6 @@ using static MikeNakis.Kit.GlobalStatics;
 public class HttpServer : Sys.IDisposable
 {
 	readonly LifeGuard lifeGuard = LifeGuard.Create();
-	readonly MimeMapper mimeMapper = new();
 	readonly string prefix;
 	readonly DirectoryPath webRoot;
 	readonly SysThread.Thread thread;
@@ -50,7 +49,6 @@ public class HttpServer : Sys.IDisposable
 		if( SysDiag.Debugger.IsAttached )
 			action.Invoke();
 		else
-		{
 			try
 			{
 				action.Invoke();
@@ -59,7 +57,6 @@ public class HttpServer : Sys.IDisposable
 			{
 				Log.Error( "Unhandled exception", exception );
 			}
-		}
 	}
 
 	void threadProcedure()
@@ -121,7 +118,7 @@ public class HttpServer : Sys.IDisposable
 		}
 
 		byte[] data = filePath.ReadAllBytes();
-		response.ContentType = mimeMapper.GetMimeType( filePath );
+		response.ContentType = getMimeType( filePath );
 		response.ContentEncoding = DotNetHelpers.BomlessUtf8;
 		response.ContentLength64 = data.LongLength;
 		response.OutputStream.Write( data );
@@ -134,5 +131,15 @@ public class HttpServer : Sys.IDisposable
 			Assert( localPath.StartsWith2( "/" ) );
 			return localPath[1..];
 		}
+	}
+
+	static string getMimeType( FilePath filePath )
+	{
+		// from https://github.com/Microsoft/referencesource/blob/main/System.Web/MimeMapping.cs
+		return filePath.Extension switch
+		{
+			".html" => "text/html",
+			_ => "application/octet-stream"
+		};
 	}
 }

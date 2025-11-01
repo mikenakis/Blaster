@@ -1,10 +1,9 @@
-namespace DevWebServer;
+namespace WebSocketTest;
 
 using MikeNakis.Clio.Extensions;
 using MikeNakis.Console;
 using MikeNakis.Kit;
 using MikeNakis.Kit.FileSystem;
-using static MikeNakis.Kit.GlobalStatics;
 using Clio = MikeNakis.Clio;
 
 public sealed class DevWebServerMain
@@ -22,7 +21,7 @@ public sealed class DevWebServerMain
 		Clio.IPositionalArgument<string> webRootArgument = argumentParser.AddStringPositionalWithDefault( "web-root", ".", "The directory containing the files to serve" );
 		if( !argumentParser.TryParse( arguments ) )
 			return -1;
-		DirectoryPath webRoot = DirectoryPath.FromAbsoluteOrRelativePath( webRootArgument.Value, DotNetHelpers.GetWorkingDirectoryPath() );
+		var webRoot = DirectoryPath.FromAbsoluteOrRelativePath( webRootArgument.Value, DotNetHelpers.GetWorkingDirectoryPath() );
 		Sys.Console.WriteLine( $"Serving '{webRoot}'" );
 		Sys.Console.WriteLine( $"On '{prefixArgument.Value}'" );
 		startWebSocketServer();
@@ -36,6 +35,23 @@ public sealed class DevWebServerMain
 
 	static void startWebSocketServer()
 	{
-		SysTask.Task.Run( MsLearnWebSocketServer.Run );
+		Server server = new Server( new SysNet.IPEndPoint( SysNet.IPAddress.Parse( "127.0.0.1" ), 8080 ) );
+		server.OnClientConnected += ( object? sender, OnClientConnectedHandler e ) =>
+		{
+			Sys.Console.WriteLine( "Client with GUID: {0} Connected!", e.GetClient().GetGuid() );
+		};
+		server.OnClientDisconnected += ( object? sender, OnClientDisconnectedHandler e ) =>
+		{
+			Sys.Console.WriteLine( "Client {0} Disconnected", e.GetClient().GetGuid() );
+		};
+		server.OnMessageReceived += ( object? sender, OnMessageReceivedHandler e ) =>
+		{
+			Sys.Console.WriteLine( "Received Message: '{1}' from client: {0}", e.GetClient().GetGuid(), e.GetMessage() );
+			e.GetClient().GetServer().SendMessage( e.GetClient(), $"{e.GetMessage()} back to you!" );
+		};
+		server.OnSendMessage += ( object? sender, OnSendMessageHandler e ) =>
+		{
+			Sys.Console.WriteLine( "Sent message: '{0}' to client {1}", e.GetMessage(), e.GetClient().GetGuid() );
+		};
 	}
 }
