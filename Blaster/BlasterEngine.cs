@@ -1,16 +1,22 @@
 namespace Blaster;
 
+using System.Collections.Generic;
 using System.Collections.Immutable;
+using System.Linq;
 using Framework.Codecs;
 using MarkdigExtensions;
 using MikeNakis.Kit;
 using MikeNakis.Kit.Collections;
 using MikeNakis.Kit.Extensions;
+using static System.MemoryExtensions;
 using static Markdig.MarkdownExtensions;
 using static MikeNakis.Kit.GlobalStatics;
 using Html = HtmlAgilityPack;
 using Markdig = Markdig;
 using MarkdigSyntax = Markdig.Syntax;
+using RegEx = System.Text.RegularExpressions;
+using Sys = System;
+using SysText = System.Text;
 
 public sealed class BlasterEngine
 {

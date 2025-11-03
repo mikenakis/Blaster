@@ -1,6 +1,9 @@
 using MikeNakis.Kit;
 using MikeNakis.Kit.FileSystem;
 using static MikeNakis.Kit.GlobalStatics;
+using Sys = System;
+using SysDiag = System.Diagnostics;
+using SysIo = System.IO;
 
 static class Helpers
 {

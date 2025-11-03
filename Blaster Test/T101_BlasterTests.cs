@@ -1,10 +1,12 @@
 namespace Blaster_Test;
 
+using System.Linq;
 using Blaster;
 using MikeNakis.Kit;
 using MikeNakis.Kit.Extensions;
 using MikeNakis.Kit.FileSystem;
 using Testing;
+using SysCompiler = System.Runtime.CompilerServices;
 using VSTesting = Microsoft.VisualStudio.TestTools.UnitTesting;
 
 [VSTesting.TestClass]

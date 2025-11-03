@@ -4,6 +4,7 @@ using Markdig = Markdig;
 using MarkdigImageAsFigure = global::MarkdigExtensions.ImageAsFigure;
 using MarkdigInlines = Markdig.Syntax.Inlines;
 using MarkdigUrlRewriter = global::MarkdigExtensions.UrlRewriter;
+using Sys = System;
 
 public static class Extensions
 {

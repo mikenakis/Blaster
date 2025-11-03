@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/_Solution Items/">
+    <File Path=".editorconfig" />
+  </Folder>
+  <Project Path="Common/Common.csproj" />
+  <Project Path="Scripting/Scripting.csproj" />
+  <Project Path="Cato/Cato.csproj" />
+</Solution>

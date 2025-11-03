@@ -1,6 +1,8 @@
 namespace Scripting;
 
 using MikeNakis.Kit;
+using Sys = System;
+using SysIo = System.IO;
 
 public sealed class ScriptsMain
 {

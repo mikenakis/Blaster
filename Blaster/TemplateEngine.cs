@@ -1,7 +1,12 @@
 namespace Blaster;
 
+using System.Collections.Generic;
 using System.Collections.Immutable;
+using System.Linq;
+using static System.MemoryExtensions;
 using static MikeNakis.Kit.GlobalStatics;
+using Sys = System;
+using SysText = System.Text;
 
 public sealed class TemplateEngine
 {

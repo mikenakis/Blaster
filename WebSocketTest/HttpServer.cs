@@ -4,6 +4,12 @@ using MikeNakis.Kit;
 using MikeNakis.Kit.Extensions;
 using MikeNakis.Kit.FileSystem;
 using static MikeNakis.Kit.GlobalStatics;
+using Sys = System;
+using SysDiag = System.Diagnostics;
+using SysNet = System.Net;
+using SysNetHttp = System.Net.Http;
+using SysTask = System.Threading.Tasks;
+using SysThread = System.Threading;
 
 public class HttpServer : Sys.IDisposable
 {

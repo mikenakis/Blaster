@@ -3,6 +3,7 @@ namespace Blaster;
 using MikeNakis.Kit;
 using MikeNakis.Kit.FileSystem;
 using static MikeNakis.Kit.GlobalStatics;
+using Sys = System;
 
 public sealed class BlasterMain
 {

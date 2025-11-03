@@ -1,9 +1,12 @@
 namespace Blaster_Test;
 
+using System.Collections.Generic;
+using System.Linq;
 using Blaster;
 using MikeNakis.Kit;
 using MikeNakis.Kit.Extensions;
 using MikeNakis.Kit.FileSystem;
+using Sys = System;
 
 sealed class FakeFileSystem : IFileSystem
 {

@@ -5,6 +5,8 @@ using MikeNakis.Console;
 using MikeNakis.Kit;
 using MikeNakis.Kit.FileSystem;
 using Clio = MikeNakis.Clio;
+using Sys = System;
+using SysNet = System.Net;
 
 public sealed class DevWebServerMain
 {
