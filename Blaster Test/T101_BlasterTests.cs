@@ -6,6 +6,7 @@ using MikeNakis.Kit;
 using MikeNakis.Kit.Extensions;
 using MikeNakis.Kit.FileSystem;
 using Testing;
+using static MikeNakis.Kit.GlobalStatics;
 using SysCompiler = System.Runtime.CompilerServices;
 using VSTesting = Microsoft.VisualStudio.TestTools.UnitTesting;
 

@@ -2,6 +2,7 @@ namespace Blaster_Test;
 
 using Blaster;
 using Testing;
+using static MikeNakis.Kit.GlobalStatics;
 using VSTesting = Microsoft.VisualStudio.TestTools.UnitTesting;
 
 [VSTesting.TestClass]

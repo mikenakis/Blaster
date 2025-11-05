@@ -16,12 +16,4 @@
 		<ProjectReference Include="..\Blaster\Blaster.csproj" />
 	</ItemGroup>
 
-	<ItemGroup>
-		<Using Static="True" Include="MikeNakis.Kit.GlobalStatics" />
-	</ItemGroup>
-
-	<ItemGroup>
-	  <Folder Include="test-files\target\" />
-	</ItemGroup>
-
 </Project>
