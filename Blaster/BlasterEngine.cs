@@ -197,14 +197,14 @@ public sealed class BlasterEngine
 		}
 	};
 
-	public static void Run( IFileSystem contentFileSystem, IFileSystem templateFileSystem, IFileSystem targetFileSystem, Sys.Action<DiagnosticMessage> diagnosticMessageConsumer )
+	public static void Run( IFileSystem contentFileSystem, IFileSystem templateFileSystem, IFileSystem outputFileSystem, Sys.Action<DiagnosticMessage> diagnosticMessageConsumer )
 	{
 		List<View> views = new List<View>();
 		foreach( IFileSystem.Path contentPath in templateFileSystem.EnumerateItems() )
 		{
 			if( contentPath.Extension != ".html" )
 			{
-				templateFileSystem.Copy( contentPath, targetFileSystem, contentPath );
+				templateFileSystem.Copy( contentPath, outputFileSystem, contentPath );
 				continue;
 			}
 			extractViews( templateFileSystem, contentPath, views, diagnosticMessageConsumer );
@@ -223,13 +223,13 @@ public sealed class BlasterEngine
 				continue;
 			if( contentPath.Extension != ".md" )
 			{
-				contentFileSystem.Copy( contentPath, targetFileSystem, contentPath );
+				contentFileSystem.Copy( contentPath, outputFileSystem, contentPath );
 				continue;
 			}
 			ViewModel viewModel = getViewModel( contentPath, contentFileSystem );
 			View view = findView( viewModel, views );
 			string htmlText = view.Apply( viewModel );
-			targetFileSystem.WriteAllText( contentPath.WithExtension( ".html" ), htmlText );
+			outputFileSystem.WriteAllText( contentPath.WithExtension( ".html" ), htmlText );
 		}
 	}
 

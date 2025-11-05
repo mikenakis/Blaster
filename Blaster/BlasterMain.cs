@@ -1,31 +1,49 @@
 namespace Blaster;
 
+using MikeNakis.Clio.Extensions;
 using MikeNakis.Kit;
 using MikeNakis.Kit.FileSystem;
-using static MikeNakis.Kit.GlobalStatics;
+using Clio = MikeNakis.Clio;
 using Sys = System;
 
 public sealed class BlasterMain
 {
 	public static void Main( string[] arguments )
 	{
-		Assert( arguments.Length == 0 );
-		Sys.Console.WriteLine( $"INFO: Current directory: '{DotNetHelpers.GetWorkingDirectoryPath()}'" );
-		Sys.Console.WriteLine( $"INFO: Arguments: [{string.Join( ", ", arguments )}]" );
-		DirectoryPath contentDirectoryPath = DirectoryPath.FromAbsolutePath( @"C:\Users\MBV\Personal\Documents\digital-garden\obsidian\blog.michael.gr\content" );
-		Sys.Console.WriteLine( $"INFO: Content: {contentDirectoryPath}" );
-		DirectoryPath templateDirectoryPath = DirectoryPath.FromAbsolutePath( @"C:\Users\MBV\Personal\Documents\digital-garden\michael.gr-blaster-files" );
-		Sys.Console.WriteLine( $"INFO: Template: {templateDirectoryPath}" );
-		DirectoryPath targetDirectoryPath = DirectoryPath.FromAbsolutePath( @"C:\Users\MBV\Personal\Documents\digital-garden\michael.gr-blaster-publish" );
-		Sys.Console.WriteLine( $"INFO: Target: {targetDirectoryPath}" );
+		bool pause = true;
+		try
+		{
+			Clio.ArgumentParser argumentParser = new();
+			Clio.IOptionArgument<string?> contentArgument = argumentParser.AddStringOption( "content", 'c', "The content directory", "directory" );
+			Clio.IOptionArgument<string> templateArgument = argumentParser.AddRequiredStringOption( "template", 't', "The template directory", "directory" );
+			Clio.IOptionArgument<string> outputArgument = argumentParser.AddRequiredStringOption( "output", 'o', "The output directory", "directory" );
+			Clio.ISwitchArgument pauseArgument = argumentParser.AddSwitch( "pause", description: "When done, wait for [Enter] to be pressed before terminating." );
+			argumentParser.Parse( arguments );
+			pause = pauseArgument.Value;
+			DirectoryPath workingDirectory = DotNetHelpers.GetWorkingDirectoryPath();
+			DirectoryPath contentDirectoryPath = contentArgument.Value == null ? workingDirectory : DirectoryPath.FromAbsoluteOrRelativePath( contentArgument.Value, workingDirectory );
+			DirectoryPath templateDirectoryPath = DirectoryPath.FromAbsoluteOrRelativePath( @"C:\Users\MBV\Personal\Documents\digital-garden\michael.gr-blaster-files", workingDirectory );
+			DirectoryPath outputDirectoryPath = DirectoryPath.FromAbsoluteOrRelativePath( @"C:\Users\MBV\Personal\Documents\digital-garden\michael.gr-blaster-publish", workingDirectory );
+			Sys.Console.WriteLine( $"INFO: Content: {contentDirectoryPath}" );
+			Sys.Console.WriteLine( $"INFO: Template: {templateDirectoryPath}" );
+			Sys.Console.WriteLine( $"INFO: Output: {outputDirectoryPath}" );
 
-		HybridFileSystem contentFileSystem = new HybridFileSystem( contentDirectoryPath );
-		contentFileSystem.AddFakeItem( IFileSystem.Path.Of( "index.md" ), DotNetClock.Instance.GetUniversalTime(), "[Pages](page/)\r\n\r\n[Posts](post/)" );
-		contentFileSystem.AddFakeItem( IFileSystem.Path.Of( "post/index.md" ), DotNetClock.Instance.GetUniversalTime(), "" );
-		contentFileSystem.AddFakeItem( IFileSystem.Path.Of( "page/index.md" ), DotNetClock.Instance.GetUniversalTime(), "" );
-		IFileSystem templateFileSystem = new HybridFileSystem( templateDirectoryPath );
-		IFileSystem targetFileSystem = new HybridFileSystem( targetDirectoryPath );
+			HybridFileSystem contentFileSystem = new HybridFileSystem( contentDirectoryPath );
+			contentFileSystem.AddFakeItem( IFileSystem.Path.Of( "index.md" ), DotNetClock.Instance.GetUniversalTime(), "[Pages](page/)\r\n\r\n[Posts](post/)" );
+			contentFileSystem.AddFakeItem( IFileSystem.Path.Of( "post/index.md" ), DotNetClock.Instance.GetUniversalTime(), "" );
+			contentFileSystem.AddFakeItem( IFileSystem.Path.Of( "page/index.md" ), DotNetClock.Instance.GetUniversalTime(), "" );
+			IFileSystem templateFileSystem = new HybridFileSystem( templateDirectoryPath );
+			IFileSystem outputFileSystem = new HybridFileSystem( outputDirectoryPath );
 
-		BlasterEngine.Run( contentFileSystem, templateFileSystem, targetFileSystem, BlasterEngine.DefaultDiagnosticMessageConsumer );
+			BlasterEngine.Run( contentFileSystem, templateFileSystem, outputFileSystem, BlasterEngine.DefaultDiagnosticMessageConsumer );
+		}
+		finally
+		{
+			if( pause )
+			{
+				Sys.Console.WriteLine( "Press [Enter] to terminate: " );
+				Sys.Console.ReadLine();
+			}
+		}
 	}
 }

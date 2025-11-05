@@ -85,6 +85,8 @@ public sealed class TemplateEngine
 			Name = name;
 			Length = length;
 		}
+
+		public override string ToString() => $"{Name}";
 	}
 
 	readonly string text;
@@ -96,10 +98,10 @@ public sealed class TemplateEngine
 	TemplateEngine( string text, ImmutableArray<int> lengths, ImmutableArray<Field> fields )
 	{
 		Assert( lengths.Length == fields.Length + 1 );
+		Assert( lengths.Sum() + fields.Select( field => field.Length ).Sum() == text.Length );
 		this.text = text;
 		this.lengths = lengths;
 		this.fields = fields;
-		Assert( lengths.Sum() + fields.Select( field => field.Length ).Sum() == text.Length );
 	}
 
 	public string GenerateText( Sys.Func<string, string> mapper )
@@ -111,6 +113,7 @@ public sealed class TemplateEngine
 
 	public void GenerateText( SysText.StringBuilder stringBuilder, Sys.Func<string, string> mapper )
 	{
+		Dictionary<string, string> valuesByFieldName = fields.Select( field => field.Name ).ToHashSet().ToDictionary( Identity, mapper.Invoke );
 		int index = 0;
 		for( int i = 0; i < lengths.Length; i++ )
 		{
@@ -120,7 +123,7 @@ public sealed class TemplateEngine
 			if( i + 1 < lengths.Length )
 			{
 				Field field = fields[i];
-				string value = mapper.Invoke( field.Name );
+				string value = valuesByFieldName[field.Name];
 				stringBuilder.Append( value );
 				index += field.Length;
 			}

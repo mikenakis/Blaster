@@ -2,6 +2,7 @@
   "profiles": {
     "Scripts": {
       "commandName": "Project",
+      "commandLineArgs": "--pause --content=C:\\Users\\MBV\\Personal\\Documents\\digital-garden\\obsidian\\blog.michael.gr\\content --template=C:\\Users\\MBV\\Personal\\Documents\\digital-garden\\michael.gr-blaster-files --output=C:\\Users\\MBV\\Personal\\Documents\\digital-garden\\michael.gr-blaster-publish",
       "workingDirectory": "$(ProjectDir)"
     }
   }
