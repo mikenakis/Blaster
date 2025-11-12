@@ -2,7 +2,7 @@
   "profiles": {
     "Scripts": {
       "commandName": "Project",
-      "commandLineArgs": "--pause --content=C:\\Users\\MBV\\Personal\\Documents\\digital-garden\\obsidian\\blog.michael.gr\\content --template=C:\\Users\\MBV\\Personal\\Documents\\digital-garden\\michael.gr-blaster-files --output=C:\\Users\\MBV\\Personal\\Documents\\digital-garden\\michael.gr-blaster-publish",
+      "commandLineArgs": "--content=D:\\Personal\\digital-garden\\obsidian\\blog.michael.gr\\content --template=D:\\Personal\\digital-garden\\michael.gr-blaster-files --output=D:\\Personal\\digital-garden\\michael.gr-blaster-publish --pause",
       "workingDirectory": "$(ProjectDir)"
     }
   }

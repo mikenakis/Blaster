@@ -22,8 +22,8 @@ public sealed class BlasterMain
 			pause = pauseArgument.Value;
 			DirectoryPath workingDirectory = DotNetHelpers.GetWorkingDirectoryPath();
 			DirectoryPath contentDirectoryPath = contentArgument.Value == null ? workingDirectory : DirectoryPath.FromAbsoluteOrRelativePath( contentArgument.Value, workingDirectory );
-			DirectoryPath templateDirectoryPath = DirectoryPath.FromAbsoluteOrRelativePath( @"C:\Users\MBV\Personal\Documents\digital-garden\michael.gr-blaster-files", workingDirectory );
-			DirectoryPath outputDirectoryPath = DirectoryPath.FromAbsoluteOrRelativePath( @"C:\Users\MBV\Personal\Documents\digital-garden\michael.gr-blaster-publish", workingDirectory );
+			DirectoryPath templateDirectoryPath = DirectoryPath.FromAbsoluteOrRelativePath( templateArgument.Value, workingDirectory );
+			DirectoryPath outputDirectoryPath = DirectoryPath.FromAbsoluteOrRelativePath( outputArgument.Value, workingDirectory );
 			Sys.Console.WriteLine( $"INFO: Content: {contentDirectoryPath}" );
 			Sys.Console.WriteLine( $"INFO: Template: {templateDirectoryPath}" );
 			Sys.Console.WriteLine( $"INFO: Output: {outputDirectoryPath}" );
@@ -36,12 +36,14 @@ public sealed class BlasterMain
 			IFileSystem outputFileSystem = new HybridFileSystem( outputDirectoryPath );
 
 			BlasterEngine.Run( contentFileSystem, templateFileSystem, outputFileSystem, BlasterEngine.DefaultDiagnosticMessageConsumer );
+
+			Sys.Console.WriteLine( "Done." );
 		}
 		finally
 		{
 			if( pause )
 			{
-				Sys.Console.WriteLine( "Press [Enter] to terminate: " );
+				Sys.Console.Write( "Press [Enter] to terminate: " );
 				Sys.Console.ReadLine();
 			}
 		}
