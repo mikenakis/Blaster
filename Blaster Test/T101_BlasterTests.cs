@@ -22,10 +22,10 @@ public class T101_BlasterTests : TestClass
 	public void T101_Blaster_Works()
 	{
 		Clock fakeClock = new FakeClock();
-		//DirectoryPath testFilesDirectoryPath = getTestDirectory().Directory( "test-files" );
-		IFileSystem sourceFileSystem = new FakeFileSystem( fakeClock /*, testFilesDirectoryPath.Directory( "content" )*/ );
+		IFileSystem sourceFileSystem = new FakeFileSystem( fakeClock );
 		sourceFileSystem.WriteAllText( IFileSystem.Path.Of( "index.md" ), "This is index.md" );
-		IFileSystem templateFileSystem = new FakeFileSystem( fakeClock /*, testFilesDirectoryPath.Directory( "template" )*/ );
+		Assert( sourceFileSystem.ReadAllText( sourceFileSystem.EnumerateItems().Single() ) == "This is index.md" );
+		IFileSystem templateFileSystem = new FakeFileSystem( fakeClock );
 		templateFileSystem.WriteAllText( IFileSystem.Path.Of( "template.html" ), """
 <!DOCTYPE html>
 <html>
@@ -37,10 +37,9 @@ public class T101_BlasterTests : TestClass
 	</body>
 </html>
 """ );
-		IFileSystem targetFileSystem = new FakeFileSystem( fakeClock /*, testFilesDirectoryPath.Directory( "target" )*/ );
+		IFileSystem targetFileSystem = new FakeFileSystem( fakeClock );
 		BlasterEngine.Run( sourceFileSystem, templateFileSystem, targetFileSystem, diagnosticMessageConsumer );
-		Assert( sourceFileSystem.ReadAllText( sourceFileSystem.EnumerateItems().Single() ) == "This is index.md" );
-		Assert( equals( targetFileSystem.ReadAllText( targetFileSystem.EnumerateItems().Single() ), """
+		string expectedText = """
 <!DOCTYPE html>
 <html>
 	<head>
@@ -48,28 +47,16 @@ public class T101_BlasterTests : TestClass
     </head>
     <body>
 		<p>This is index.md</p>
-
 	</body>
 </html>
-""" ) );
+""";
+		string actualText = targetFileSystem.ReadAllText( targetFileSystem.EnumerateItems().Single() );
+		Assert( equals( actualText, expectedText ) );
+		return;
 
 		static void diagnosticMessageConsumer( BlasterEngine.DiagnosticMessage diagnosticMessage )
 		{
 			Assert( false );
-		}
-
-		static bool equals( string s1, string s2 )
-		{
-			return fix( s1 ) == fix( s2 );
-
-			static string fix( string s )
-			{
-				s = s.Replace2( "\r\n", " " );
-				s = s.Replace2( "\n", " " );
-				s = s.Replace2( "\t", " " );
-				s = s.Replace2( "  ", " " );
-				return s;
-			}
 		}
 	}
 
@@ -79,25 +66,37 @@ public class T101_BlasterTests : TestClass
 		Clock fakeClock = new FakeClock();
 		DirectoryPath testFilesDirectoryPath = getTestDirectory().Directory( "test-files" );
 		IFileSystem sourceFileSystem = new HybridFileSystem( /*fakeClock,*/ testFilesDirectoryPath.Directory( "content" ) );
-		//sourceFileSystem.WriteAllText( IFileSystem.Path.Of( "index.md" ), "[Posts](post/index.md)" );
-		//sourceFileSystem.WriteAllText( IFileSystem.Path.Of( "post/index.md" ), "" );
-		//sourceFileSystem.WriteAllText( IFileSystem.Path.Of( "post/post1.md" ), "This is post1" );
 		IFileSystem templateFileSystem = new FakeFileSystem( fakeClock, testFilesDirectoryPath.Directory( "template" ) );
-		templateFileSystem.WriteAllText( IFileSystem.Path.Of( "template.html" ), """
-<!DOCTYPE html>
-<html>
-	<head>
-		<title>{{title}}</title>
-		<meta name="viewport" content="width=device-width, height=device-height, initial-scale=1.0, minimum-scale=1.0">
-		<style>body{ margin:1em; color: #F0E0e0; background-color: #1e1010 }</style>
-    </head>
-    <body>
-		{{content}}
-	</body>
-</html>
-""" );
 		IFileSystem targetFileSystem = new FakeFileSystem( fakeClock, testFilesDirectoryPath.Directory( "target" ) );
 
-		BlasterEngine.Run( sourceFileSystem, templateFileSystem, targetFileSystem, BlasterEngine.DefaultDiagnosticMessageConsumer );
+		BlasterEngine.Run( sourceFileSystem, templateFileSystem, targetFileSystem, diagnosticMessageConsumer );
+
+		static void diagnosticMessageConsumer( BlasterEngine.DiagnosticMessage diagnosticMessage )
+		{
+			Assert( false );
+		}
+	}
+
+	static bool equals( string s1, string s2 )
+	{
+		string f1 = fix( s1 );
+		string f2 = fix( s2 );
+		Assert( f1 == f2 );
+		return true;
+
+		static string fix( string s )
+		{
+			s = s.Replace2( "\r\n", " " );
+			s = s.Replace2( "\n", " " );
+			s = s.Replace2( "\t", " " );
+			while( true )
+			{
+				string s2 = s.Replace2( "  ", " " );
+				if( s2 == s )
+					break;
+				s = s2;
+			}
+			return s;
+		}
 	}
 }
