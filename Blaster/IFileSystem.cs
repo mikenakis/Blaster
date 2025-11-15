@@ -26,7 +26,7 @@ public interface IFileSystem
 
 		Path( string content )
 		{
-			Assert( !content.Contains2( '\\' ) );
+			Assert( !content.Contains2( '\\' ) ); //forward slashes only
 			Content = content;
 		}
 

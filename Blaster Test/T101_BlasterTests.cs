@@ -54,7 +54,7 @@ public class T101_BlasterTests : TestClass
 		Assert( equals( actualText, expectedText ) );
 		return;
 
-		static void diagnosticMessageConsumer( BlasterEngine.DiagnosticMessage diagnosticMessage )
+		static void diagnosticMessageConsumer( Diagnostic diagnosticMessage )
 		{
 			Assert( false );
 		}
@@ -71,7 +71,7 @@ public class T101_BlasterTests : TestClass
 
 		BlasterEngine.Run( sourceFileSystem, templateFileSystem, targetFileSystem, diagnosticMessageConsumer );
 
-		static void diagnosticMessageConsumer( BlasterEngine.DiagnosticMessage diagnosticMessage )
+		static void diagnosticMessageConsumer( Diagnostic diagnosticMessage )
 		{
 			Assert( false );
 		}
