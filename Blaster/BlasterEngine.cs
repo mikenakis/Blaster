@@ -18,77 +18,67 @@ using SysText = System.Text;
 
 public sealed class BlasterEngine
 {
-	public static readonly Sys.Action<Diagnostic> DefaultDiagnosticMessageConsumer = diagnosticMessage =>
+	public static readonly Sys.Action<Diagnostic> DefaultDiagnosticConsumer = diagnostic =>
 	{
-		d( $"{diagnosticMessage.SourceFilePathName}({diagnosticMessage.LineNumber},{diagnosticMessage.ColumnNumber}): {diagnosticMessage.Message}" );
-		if( diagnosticMessage.LineText != null )
-		{
-			d( $"    {diagnosticMessage.LineText}" );
-			d( $"    {new string( ' ', diagnosticMessage.ColumnNumber )}^" );
-		}
-		return;
-
-		static void d( string s )
-		{
-			Log.Info( s );
-		}
+		foreach( string line in diagnostic.ToString().Split( "\n" ) )
+			Log.Info( line );
 	};
 
-	public static void Run( IFileSystem contentFileSystem, IFileSystem templateFileSystem, IFileSystem outputFileSystem, Sys.Action<Diagnostic> diagnosticMessageConsumer )
+	public static void Run( FileSystem contentFileSystem, FileSystem templateFileSystem, FileSystem outputFileSystem, Sys.Action<Diagnostic> diagnosticConsumer )
 	{
-		BlasterEngine blasterEngine = new( contentFileSystem, templateFileSystem, outputFileSystem, diagnosticMessageConsumer );
+		BlasterEngine blasterEngine = new( contentFileSystem, templateFileSystem, outputFileSystem, diagnosticConsumer );
 		blasterEngine.Run();
 	}
 
-	readonly IFileSystem contentFileSystem;
-	readonly IFileSystem templateFileSystem;
-	readonly IFileSystem outputFileSystem;
-	readonly Sys.Action<Diagnostic> diagnosticMessageConsumer;
+	readonly FileSystem contentFileSystem;
+	readonly FileSystem templateFileSystem;
+	readonly FileSystem outputFileSystem;
+	readonly Sys.Action<Diagnostic> diagnosticConsumer;
 	readonly List<View> views = new List<View>();
 	readonly View rootView = new ContentView( null, getRootViewHtmlNode(), Name.Of( "root" ), new RegEx.Regex( ".*" ) );
 
-	BlasterEngine( IFileSystem contentFileSystem, IFileSystem templateFileSystem, IFileSystem outputFileSystem, Sys.Action<Diagnostic> diagnosticMessageConsumer )
+	BlasterEngine( FileSystem contentFileSystem, FileSystem templateFileSystem, FileSystem outputFileSystem, Sys.Action<Diagnostic> diagnosticConsumer )
 	{
 		this.contentFileSystem = contentFileSystem;
 		this.templateFileSystem = templateFileSystem;
 		this.outputFileSystem = outputFileSystem;
-		this.diagnosticMessageConsumer = diagnosticMessageConsumer;
+		this.diagnosticConsumer = diagnosticConsumer;
 		views.Add( rootView );
 	}
 
-	void issueDiagnostic( string sourceFilePathName, int lineNumber, int columnNumber, Severity severity, string? lineText, string message )
+	void issueDiagnostic( Diagnostic diagnostic )
 	{
-		var diagnostic = new Diagnostic( sourceFilePathName, lineNumber, columnNumber, severity, lineText, message );
-		diagnosticMessageConsumer.Invoke( diagnostic );
+		diagnosticConsumer.Invoke( diagnostic );
 	}
 
 	public void Run()
 	{
-		foreach( IFileSystem.Path contentPath in templateFileSystem.EnumerateItems() )
+		foreach( FileSystem.Item contentItem in templateFileSystem.EnumerateItems() )
 		{
-			if( contentPath.Extension != ".html" )
+			if( contentItem.Path.Extension != ".html" )
 			{
-				templateFileSystem.Copy( contentPath, outputFileSystem, contentPath );
+				outputFileSystem.CopyFrom( contentItem );
 				continue;
 			}
-			extractViews( rootView, contentPath );
+			extractViews( rootView, contentItem );
 		}
 
 		Helpers.PrintTree( rootView, view => views.Where( v => v.Parent == view ), view => view.ToString(), s => Log.Info( s ) );
 
-		foreach( IFileSystem.Path contentPath in contentFileSystem.EnumerateItems() )
+		foreach( FileSystem.Item contentItem in contentFileSystem.EnumerateItems() )
 		{
-			if( contentPath.Content.StartsWith2( "_" ) ) //TODO: get rid of
+			if( contentItem.Path.Content.StartsWith2( "_" ) ) //TODO: get rid of
 				continue;
-			if( contentPath.Extension != ".md" )
+			if( contentItem.Path.Extension != ".md" )
 			{
-				contentFileSystem.Copy( contentPath, outputFileSystem, contentPath );
+				outputFileSystem.CopyFrom( contentItem );
 				continue;
 			}
-			ViewModel viewModel = getViewModel( contentPath, contentFileSystem );
+			ViewModel viewModel = getViewModel( contentItem, contentFileSystem );
 			View view = findView( viewModel, rootView );
 			string htmlText = view.Apply( viewModel );
-			outputFileSystem.WriteAllText( contentPath.WithExtension( ".html" ), htmlText );
+			FileSystem.Item outputItem = outputFileSystem.CreateItem( contentItem.Path.WithExtension( ".html" ) );
+			outputItem.WriteAllText( htmlText );
 		}
 	}
 
@@ -110,34 +100,33 @@ public sealed class BlasterEngine
 		return templateDocument.DocumentNode;
 	}
 
-	void extractViews( View parentView, IFileSystem.Path templatePath )
+	void extractViews( View parentView, FileSystem.Item templateItem )
 	{
-		string template = templateFileSystem.ReadAllText( templatePath );
-		string diagnosticTemplatePathName = templateFileSystem.GetDiagnosticFullPath( templatePath );
+		string template = templateItem.ReadAllText();
 		Html.HtmlDocument templateDocument = new Html.HtmlDocument();
 		templateDocument.LoadHtml( template );
 		foreach( Html.HtmlParseError parseError in templateDocument.ParseErrors )
-			issueDiagnostic( diagnosticTemplatePathName, parseError.Line, parseError.LinePosition, Severity.Error, parseError.SourceText, parseError.Reason );
+			issueDiagnostic( new HtmlParseDiagnostic( Severity.Error, templateItem, parseError.Line, parseError.LinePosition, parseError.Code, parseError.Reason ) );
 		Html.HtmlNode htmlNode = templateDocument.DocumentNode;
 		htmlNode.Remove(); //try this
-		View documentView = new ContentView( parentView, htmlNode, Name.Of( templatePath.Content ), new RegEx.Regex( ".*" ) );
+		View documentView = new ContentView( parentView, htmlNode, Name.Of( templateItem.Path.Content ), new RegEx.Regex( ".*" ) );
 		views.Add( documentView );
-		recurse( documentView, htmlNode, diagnosticTemplatePathName );
+		recurse( documentView, htmlNode, templateItem );
 		foreach( View view in views )
 			view.HtmlNode.Remove();
 		return;
 
-		void recurse( View parentView, Html.HtmlNode parentNode, string diagnosticTemplatePathName )
+		void recurse( View parentView, Html.HtmlNode parentNode, FileSystem.Item templateItem )
 		{
 			foreach( Html.HtmlNode childNode in parentNode.ChildNodes )
 			{
-				View? childView = createChildView( parentView, childNode, diagnosticTemplatePathName );
+				View? childView = createChildView( parentView, childNode, templateItem );
 				if( childView != null )
 					views.Add( childView );
-				recurse( childView ?? parentView, childNode, diagnosticTemplatePathName );
+				recurse( childView ?? parentView, childNode, templateItem );
 			}
 
-			View? createChildView( View parentView, Html.HtmlNode htmlNode, string diagnosticTemplatePathName )
+			View? createChildView( View parentView, Html.HtmlNode htmlNode, FileSystem.Item templateItem )
 			{
 				if( htmlNode.Name == Constants.ContentViewTagName )
 				{
@@ -149,7 +138,7 @@ public sealed class BlasterEngine
 				{
 					Name name = getName( htmlNode );
 					RegEx.Regex appliesTo = getAppliesTo( htmlNode );
-					Name elementViewName = getElementViewName( htmlNode, diagnosticTemplatePathName );
+					Name elementViewName = getElementViewName( htmlNode, templateItem );
 					return new CollectionView( parentView, htmlNode, name, appliesTo, elementViewName );
 				}
 				return null;
@@ -166,12 +155,12 @@ public sealed class BlasterEngine
 					return new RegEx.Regex( appliesToAttribute?.Value ?? ".*" );
 				}
 
-				Name getElementViewName( Html.HtmlNode htmlNode, string diagnosticTemplatePathName )
+				Name getElementViewName( Html.HtmlNode htmlNode, FileSystem.Item templateItem )
 				{
 					Html.HtmlAttribute? elementViewAttribute = htmlNode.Attributes.AttributesWithName( Constants.ElementViewAttributeName ).SingleOrDefault();
 					if( elementViewAttribute == null )
 					{
-						issueDiagnostic( diagnosticTemplatePathName, htmlNode.Line, htmlNode.LinePosition, Severity.Error, "", $"Collection view is missing a '{Constants.ElementViewAttributeName}' attribute" );
+						issueDiagnostic( new CustomDiagnostic( Severity.Error, templateItem, htmlNode.Line, htmlNode.LinePosition, $"Collection view is missing a '{Constants.ElementViewAttributeName}' attribute" ) );
 						return Name.Of( "" );
 					}
 					return Name.Of( elementViewAttribute.Value );
@@ -180,20 +169,20 @@ public sealed class BlasterEngine
 		}
 	}
 
-	static ViewModel getViewModel( IFileSystem.Path contentPath, IFileSystem contentFileSystem )
+	static ViewModel getViewModel( FileSystem.Item contentItem, FileSystem contentFileSystem )
 	{
-		string markdownText = contentFileSystem.ReadAllText( contentPath );
+		string markdownText = contentItem.ReadAllText();
 
 		if( markdownText.IsWhitespace() )
 		{
 			SysText.StringBuilder stringBuilder = new();
-			ImmutableArray<IFileSystem.Path> paths = contentFileSystem.EnumerateItems( contentPath ).Where( childPath => childPath.Content.EndsWith2( ".md" ) ).ToImmutableArray();
-			return new CollectionViewModel( contentPath, paths );
+			ImmutableArray<FileSystem.Item> siblingItems = contentFileSystem.EnumerateSiblingItems( contentItem ).Where( siblingItem => siblingItem.Path.Content.EndsWith2( ".md" ) ).ToImmutableArray();
+			return new CollectionViewModel( contentItem, siblingItems );
 		}
 
 		string htmlText = convert( markdownText );
 		htmlText = fixLinks( htmlText );
-		return new ContentViewModel( contentPath, htmlText );
+		return new ContentViewModel( contentItem, htmlText );
 	}
 
 	View findView( ViewModel viewModel, View? parentView )
@@ -208,7 +197,7 @@ public sealed class BlasterEngine
 				{
 					Log.Warn( $"More than one view is applicable to {viewModel}" );
 					string underMessage = parentView == null ? "" : $" under {parentView.Name.Content}";
-					issueDiagnostic( viewModel.Path.Content, 1, 1, Severity.Warn, null, $"More than one view{underMessage} is applicable to {viewModel}" );
+					issueDiagnostic( new CustomDiagnostic( Severity.Warn, viewModel.Item, 1, 1, $"More than one view{underMessage} is applicable to {viewModel}" ) );
 				}
 				return applicableViews[0];
 			}
@@ -233,7 +222,7 @@ public sealed class BlasterEngine
 				continue;
 			if( href.EndsWith2( ".md" ) )
 			{
-				href = IFileSystem.Path.Of( hrefAttribute.Value ).WithExtension( ".html" ).Content;
+				href = FileSystem.Path.Of( hrefAttribute.Value ).WithExtension( ".html" ).Content;
 				hrefAttribute.Value = href;
 			}
 		}

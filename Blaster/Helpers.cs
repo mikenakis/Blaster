@@ -9,6 +9,13 @@ using SysText = System.Text;
 
 static class Helpers
 {
+	public static string GetLine( string text, int lineNumber )
+	{
+		if( lineNumber == 0 )
+			return "";
+		return text.Split( '\n' ).Skip( lineNumber - 1 ).First();
+	}
+
 	public static void PrintTree<T>( T rootNode, Sys.Func<T, IEnumerable<T>> breeder, Sys.Func<T, string> stringizer, Sys.Action<string> emitter, int indentation = 1 )
 	{
 		Assert( indentation >= 1 );

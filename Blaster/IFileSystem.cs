@@ -8,9 +8,9 @@ using static MikeNakis.Kit.GlobalStatics;
 using Sys = System;
 using SysIo = System.IO;
 
-public interface IFileSystem
+public abstract class FileSystem
 {
-	readonly struct Path : Sys.IComparable<Path>, Sys.IEquatable<Path>
+	public readonly struct Path : Sys.IComparable<Path>, Sys.IEquatable<Path>
 	{
 		public static bool operator ==( Path left, Path right ) => left.Equals( right );
 		public static bool operator !=( Path left, Path right ) => !left.Equals( right );
@@ -38,6 +38,13 @@ public interface IFileSystem
 
 		public string Extension => getExtension();
 
+		public readonly string GetDirectory()
+		{
+#pragma warning disable RS0030 // Do not use banned APIs
+			return SysIo.Path.GetDirectoryName( Content ).OrThrow();
+#pragma warning restore RS0030 // Do not use banned APIs
+		}
+
 		string getExtension()
 		{
 #pragma warning disable RS0030 // Do not use banned APIs
@@ -54,12 +61,42 @@ public interface IFileSystem
 		}
 	}
 
-	IEnumerable<Path> EnumerateItems();
-	IEnumerable<Path> EnumerateItems( Path path );
-	byte[] ReadAllBytes( Path path );
-	void WriteAllBytes( Path path, byte[] text );
-	string ReadAllText( Path path ) => DotNetHelpers.BomlessUtf8.GetString( ReadAllBytes( path ) );
-	void WriteAllText( Path path, string text ) => WriteAllBytes( path, DotNetHelpers.BomlessUtf8.GetBytes( text ) );
-	void Copy( Path path, IFileSystem targetFileSystem, Path targetPath ) => targetFileSystem.WriteAllBytes( targetPath, ReadAllBytes( path ) );
-	string GetDiagnosticFullPath( Path path );
+	public abstract class Item
+	{
+		public abstract Path Path { get; }
+
+		public abstract byte[] ReadAllBytes();
+		public abstract void WriteAllBytes( byte[] text );
+		public string ReadAllText() => DotNetHelpers.BomlessUtf8.GetString( ReadAllBytes() );
+		public void WriteAllText( string text ) => WriteAllBytes( DotNetHelpers.BomlessUtf8.GetBytes( text ) );
+		public abstract string GetDiagnosticPathName();
+
+		public void CopyFrom( Item sourceItem )
+		{
+			WriteAllBytes( sourceItem.ReadAllBytes() );
+		}
+	}
+
+	public abstract Item CreateItem( Path path );
+
+	public Item CopyFrom( Item sourceItem )
+	{
+		Item targetItem = CreateItem( sourceItem.Path );
+		targetItem.CopyFrom( sourceItem );
+		return targetItem;
+	}
+
+	public abstract IEnumerable<Item> EnumerateItems();
+	//public abstract IEnumerable<Item> EnumerateSiblingItems( Item item );
+
+	public IEnumerable<Item> EnumerateSiblingItems( Item rootItem )
+	{
+		string rootPath = rootItem.Path.GetDirectory();
+		foreach( Item item in EnumerateItems() )
+		{
+			string itemPath = item.Path.GetDirectory();
+			if( itemPath == rootPath )
+				yield return item;
+		}
+	}
 }

@@ -6,28 +6,28 @@ using MikeNakis.Kit.Extensions;
 
 abstract class ViewModel
 {
-	public readonly IFileSystem.Path Path;
+	public readonly FileSystem.Item Item;
 	public abstract string TypeName { get; }
 	public abstract string Title { get; }
 	public abstract string Content { get; }
 
-	protected ViewModel( IFileSystem.Path path )
+	protected ViewModel( FileSystem.Item item )
 	{
-		Path = path;
+		Item = item;
 	}
 
-	public override string ToString() => $"{GetType().Name} \"{Path}\"";
+	public override string ToString() => $"{GetType().Name} \"{Item}\"";
 }
 
 sealed class ContentViewModel : ViewModel
 {
-	public override string TypeName => Path.Content;
+	public override string TypeName => Item.Path.Content;
 	public override string Title => TypeName; //TODO: get from frontmatter
 	public override string Content => HtmlText;
 	public readonly string HtmlText;
 
-	public ContentViewModel( IFileSystem.Path path, string htmlText )
-		: base( path )
+	public ContentViewModel( FileSystem.Item item, string htmlText )
+		: base( item )
 	{
 		HtmlText = htmlText;
 	}
@@ -35,13 +35,13 @@ sealed class ContentViewModel : ViewModel
 
 sealed class CollectionViewModel : ViewModel
 {
-	public override string TypeName => $"{Path.Content}[]";
+	public override string TypeName => $"{Item.Path.Content}[]";
 	public override string Title => TypeName;
-	public override string Content => Paths.Select( path => path.Content ).MakeString( ", " );
-	public readonly ImmutableArray<IFileSystem.Path> Paths;
+	public override string Content => Paths.Select( path => path.Path.Content ).MakeString( ", " );
+	public readonly ImmutableArray<FileSystem.Item> Paths;
 
-	public CollectionViewModel( IFileSystem.Path path, ImmutableArray<IFileSystem.Path> paths )
-		: base( path )
+	public CollectionViewModel( FileSystem.Item item, ImmutableArray<FileSystem.Item> paths )
+		: base( item )
 	{
 		Paths = paths;
 	}

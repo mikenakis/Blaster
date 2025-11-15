@@ -1,5 +1,6 @@
 namespace Blaster_Test;
 
+using System.Collections.Generic;
 using System.Linq;
 using Blaster;
 using MikeNakis.Kit;
@@ -7,26 +8,45 @@ using MikeNakis.Kit.Extensions;
 using MikeNakis.Kit.FileSystem;
 using Testing;
 using static MikeNakis.Kit.GlobalStatics;
+using Html = HtmlAgilityPack;
 using SysCompiler = System.Runtime.CompilerServices;
 using VSTesting = Microsoft.VisualStudio.TestTools.UnitTesting;
 
 [VSTesting.TestClass]
 public class T101_BlasterTests : TestClass
 {
-	static DirectoryPath getTestDirectory( [SysCompiler.CallerFilePath] string callerFilePath = "" )
+	readonly Clock fakeClock = new FakeClock();
+
+	[VSTesting.TestMethod]
+	public void T101_Malformed_Html_Is_Caught()
 	{
-		return FilePath.FromAbsolutePath( callerFilePath ).Directory;
+		FileSystem sourceFileSystem = new FakeFileSystem( fakeClock );
+		FileSystem templateFileSystem = new FakeFileSystem( fakeClock );
+		templateFileSystem.CreateItem( FileSystem.Path.Of( "template.html" ) ).WriteAllText( """
+<!DOCTYPE html>
+<html>
+""" );
+		FileSystem targetFileSystem = new FakeFileSystem( fakeClock );
+		List<Diagnostic> diagnostics = new();
+		BlasterEngine.Run( sourceFileSystem, templateFileSystem, targetFileSystem, diagnosticConsumer );
+		Assert( diagnostics.Count == 1 );
+		Assert( diagnostics[0] is HtmlParseDiagnostic );
+		Assert( ((HtmlParseDiagnostic)diagnostics[0]).HtmlParseErrorCode == Html.HtmlParseErrorCode.TagNotClosed );
+		return;
+
+		void diagnosticConsumer( Diagnostic diagnostic )
+		{
+			diagnostics.Add( diagnostic );
+		}
 	}
 
 	[VSTesting.TestMethod]
-	public void T101_Blaster_Works()
+	public void T102_Root_Template_Works()
 	{
-		Clock fakeClock = new FakeClock();
-		IFileSystem sourceFileSystem = new FakeFileSystem( fakeClock );
-		sourceFileSystem.WriteAllText( IFileSystem.Path.Of( "index.md" ), "This is index.md" );
-		Assert( sourceFileSystem.ReadAllText( sourceFileSystem.EnumerateItems().Single() ) == "This is index.md" );
-		IFileSystem templateFileSystem = new FakeFileSystem( fakeClock );
-		templateFileSystem.WriteAllText( IFileSystem.Path.Of( "template.html" ), """
+		FileSystem sourceFileSystem = new FakeFileSystem( fakeClock );
+		sourceFileSystem.CreateItem( FileSystem.Path.Of( "index.md" ) ).WriteAllText( "This is index.md" );
+		FileSystem templateFileSystem = new FakeFileSystem( fakeClock );
+		templateFileSystem.CreateItem( FileSystem.Path.Of( "template.html" ) ).WriteAllText( """
 <!DOCTYPE html>
 <html>
 	<head>
@@ -37,8 +57,8 @@ public class T101_BlasterTests : TestClass
 	</body>
 </html>
 """ );
-		IFileSystem targetFileSystem = new FakeFileSystem( fakeClock );
-		BlasterEngine.Run( sourceFileSystem, templateFileSystem, targetFileSystem, diagnosticMessageConsumer );
+		FileSystem targetFileSystem = new FakeFileSystem( fakeClock );
+		BlasterEngine.Run( sourceFileSystem, templateFileSystem, targetFileSystem, diagnosticConsumer );
 		string expectedText = """
 <!DOCTYPE html>
 <html>
@@ -50,28 +70,32 @@ public class T101_BlasterTests : TestClass
 	</body>
 </html>
 """;
-		string actualText = targetFileSystem.ReadAllText( targetFileSystem.EnumerateItems().Single() );
+		string actualText = targetFileSystem.EnumerateItems().Single().ReadAllText();
 		Assert( equals( actualText, expectedText ) );
 		return;
 
-		static void diagnosticMessageConsumer( Diagnostic diagnosticMessage )
+		static void diagnosticConsumer( Diagnostic diagnostic )
 		{
 			Assert( false );
 		}
 	}
 
-	[VSTesting.TestMethod]
-	public void T102_Blaster_Works()
+	static DirectoryPath getTestDirectory( [SysCompiler.CallerFilePath] string callerFilePath = "" )
 	{
-		Clock fakeClock = new FakeClock();
+		return FilePath.FromAbsolutePath( callerFilePath ).Directory;
+	}
+
+	[VSTesting.TestMethod]
+	public void T103_Complex_Template_Works()
+	{
 		DirectoryPath testFilesDirectoryPath = getTestDirectory().Directory( "test-files" );
-		IFileSystem sourceFileSystem = new HybridFileSystem( /*fakeClock,*/ testFilesDirectoryPath.Directory( "content" ) );
-		IFileSystem templateFileSystem = new FakeFileSystem( fakeClock, testFilesDirectoryPath.Directory( "template" ) );
-		IFileSystem targetFileSystem = new FakeFileSystem( fakeClock, testFilesDirectoryPath.Directory( "target" ) );
+		FileSystem sourceFileSystem = new HybridFileSystem( /*fakeClock,*/ testFilesDirectoryPath.Directory( "content" ) );
+		FileSystem templateFileSystem = new FakeFileSystem( fakeClock, testFilesDirectoryPath.Directory( "template" ) );
+		FileSystem targetFileSystem = new FakeFileSystem( fakeClock, testFilesDirectoryPath.Directory( "target" ) );
 
-		BlasterEngine.Run( sourceFileSystem, templateFileSystem, targetFileSystem, diagnosticMessageConsumer );
+		BlasterEngine.Run( sourceFileSystem, templateFileSystem, targetFileSystem, diagnosticConsumer );
 
-		static void diagnosticMessageConsumer( Diagnostic diagnosticMessage )
+		static void diagnosticConsumer( Diagnostic diagnostic )
 		{
 			Assert( false );
 		}

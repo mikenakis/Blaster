@@ -1,37 +1,56 @@
 namespace Blaster_Test;
 
 using System.Collections.Generic;
-using System.Linq;
 using Blaster;
 using MikeNakis.Kit;
-using MikeNakis.Kit.Extensions;
 using MikeNakis.Kit.FileSystem;
 using Sys = System;
 
-sealed class FakeFileSystem : IFileSystem
+sealed class FakeFileSystem : FileSystem
 {
-	sealed class Item
+	sealed class FakeItem : Item
 	{
-		public IFileSystem.Path Path { get; }
+		readonly FakeFileSystem fileSystem;
+		readonly Path path;
 		readonly Sys.DateTime dateTime;
-		public byte[] Content;
+		byte[] content = Sys.Array.Empty<byte>();
+		public override Path Path => path;
 
-		public Item( IFileSystem.Path path, Sys.DateTime dateTime )
+		public FakeItem( FakeFileSystem fileSystem, Path path, Sys.DateTime dateTime )
 		{
-			Path = path;
+			this.fileSystem = fileSystem;
+			this.path = path;
 			this.dateTime = dateTime;
-			Content = Sys.Array.Empty<byte>();
 		}
 
 		public Sys.DateTime GetTimeModified()
 		{
 			return dateTime;
 		}
+
+		public override byte[] ReadAllBytes()
+		{
+			byte[] result = new byte[content.Length];
+			Sys.Array.Copy( content, result, content.Length );
+			return result;
+		}
+
+		public override void WriteAllBytes( byte[] bytes )
+		{
+			content = new byte[bytes.Length];
+			Sys.Array.Copy( bytes, content, content.Length );
+			fileSystem.possiblyPersist( path, bytes );
+		}
+
+		public override string GetDiagnosticPathName()
+		{
+			return fileSystem.getFilePathName( Path );
+		}
 	}
 
 	readonly Clock clock;
 	readonly DirectoryPath? persistenceDirectoryPath;
-	readonly Dictionary<IFileSystem.Path, Item> items = new();
+	readonly Dictionary<Path, FakeItem> items = new();
 
 	public FakeFileSystem( Clock clock, DirectoryPath? persistenceDirectoryPath = null )
 	{
@@ -39,48 +58,33 @@ sealed class FakeFileSystem : IFileSystem
 		this.persistenceDirectoryPath = persistenceDirectoryPath;
 	}
 
-	public void AddItem( IFileSystem.Path path, Sys.DateTime dateTime, string content )
+	public Item AddItem( Path path, Sys.DateTime dateTime, string content )
 	{
-		byte[] bytes = DotNetHelpers.BomlessUtf8.GetBytes( content );
-		var item = new Item( path, dateTime );
+		FakeItem item = new FakeItem( this, path, dateTime );
 		items.Add( path, item );
-		item.Content = bytes;
-		possiblyPersist( path, bytes );
+		item.WriteAllBytes( DotNetHelpers.BomlessUtf8.GetBytes( content ) );
+		return item;
 	}
 
-	IEnumerable<IFileSystem.Path> IFileSystem.EnumerateItems() => items.Keys;
+	public override IEnumerable<Item> EnumerateItems() => items.Values;
 
-	IEnumerable<IFileSystem.Path> IFileSystem.EnumerateItems( IFileSystem.Path path )
-	{
-		return items.Keys.Where( p => p.Content.StartsWith2( path.Content ) );
-	}
-
-	byte[] IFileSystem.ReadAllBytes( IFileSystem.Path path )
-	{
-		return items[path].Content;
-	}
-
-	void IFileSystem.WriteAllBytes( IFileSystem.Path path, byte[] bytes )
-	{
-		if( !items.TryGetValue( path, out Item? item ) )
-		{
-			item = new Item( path, clock.GetUniversalTime() );
-			items.Add( path, item );
-		}
-		item.Content = bytes;
-		possiblyPersist( path, bytes );
-	}
-
-	void possiblyPersist( IFileSystem.Path path, byte[] bytes )
+	void possiblyPersist( Path path, byte[] bytes )
 	{
 		if( persistenceDirectoryPath != null )
 			persistenceDirectoryPath.RelativeFile( path.Content ).WriteAllBytes( bytes );
 	}
 
-	public string GetDiagnosticFullPath( IFileSystem.Path path )
+	string getFilePathName( Path path )
 	{
-		if( persistenceDirectoryPath != null )
-			return persistenceDirectoryPath.RelativeFile( path.Content ).Path;
-		return path.Content;
+		if( persistenceDirectoryPath == null )
+			return path.Content;
+		return persistenceDirectoryPath.RelativeFile( path.Content ).Path;
+	}
+
+	public override Item CreateItem( Path path )
+	{
+		FakeItem item = new FakeItem( this, path, clock.GetUniversalTime() );
+		items.Add( path, item );
+		return item;
 	}
 }

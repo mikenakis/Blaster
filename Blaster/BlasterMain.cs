@@ -29,13 +29,13 @@ public sealed class BlasterMain
 			Sys.Console.WriteLine( $"INFO: Output: {outputDirectoryPath}" );
 
 			HybridFileSystem contentFileSystem = new HybridFileSystem( contentDirectoryPath );
-			contentFileSystem.AddFakeItem( IFileSystem.Path.Of( "index.md" ), DotNetClock.Instance.GetUniversalTime(), "[Pages](page/)\r\n\r\n[Posts](post/)" );
-			contentFileSystem.AddFakeItem( IFileSystem.Path.Of( "post/index.md" ), DotNetClock.Instance.GetUniversalTime(), "" );
-			contentFileSystem.AddFakeItem( IFileSystem.Path.Of( "page/index.md" ), DotNetClock.Instance.GetUniversalTime(), "" );
-			IFileSystem templateFileSystem = new HybridFileSystem( templateDirectoryPath );
-			IFileSystem outputFileSystem = new HybridFileSystem( outputDirectoryPath );
+			contentFileSystem.AddFakeItem( FileSystem.Path.Of( "index.md" ), DotNetClock.Instance.GetUniversalTime(), "[Pages](page/)\r\n\r\n[Posts](post/)" );
+			contentFileSystem.AddFakeItem( FileSystem.Path.Of( "post/index.md" ), DotNetClock.Instance.GetUniversalTime(), "" );
+			contentFileSystem.AddFakeItem( FileSystem.Path.Of( "page/index.md" ), DotNetClock.Instance.GetUniversalTime(), "" );
+			FileSystem templateFileSystem = new HybridFileSystem( templateDirectoryPath );
+			FileSystem outputFileSystem = new HybridFileSystem( outputDirectoryPath );
 
-			BlasterEngine.Run( contentFileSystem, templateFileSystem, outputFileSystem, BlasterEngine.DefaultDiagnosticMessageConsumer );
+			BlasterEngine.Run( contentFileSystem, templateFileSystem, outputFileSystem, BlasterEngine.DefaultDiagnosticConsumer );
 
 			Sys.Console.WriteLine( "Done." );
 		}

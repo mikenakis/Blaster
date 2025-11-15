@@ -65,6 +65,6 @@ sealed class CollectionView : View
 	public override string Apply( ViewModel viewModel )
 	{
 		CollectionViewModel collectionViewModel = (CollectionViewModel)viewModel;
-		return collectionViewModel.Path.Content; //XXX
+		return collectionViewModel.Item.Path.Content; //XXX
 	}
 }

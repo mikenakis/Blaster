@@ -4,20 +4,32 @@ using System.Collections.Generic;
 using MikeNakis.Kit;
 using MikeNakis.Kit.Extensions;
 using MikeNakis.Kit.FileSystem;
-using static MikeNakis.Kit.GlobalStatics;
 using Sys = System;
 
-public sealed class HybridFileSystem : IFileSystem
+public sealed class HybridFileSystem : FileSystem
 {
-	sealed class Item
+	abstract class MyItem : Item
 	{
-		public IFileSystem.Path Path { get; }
+		public readonly HybridFileSystem FileSystem;
+		readonly Path path;
+		public override Path Path => path;
+
+		protected MyItem( HybridFileSystem fileSystem, Path path )
+		{
+			FileSystem = fileSystem;
+			this.path = path;
+		}
+	}
+
+	sealed class FileItem : MyItem
+	{
 		readonly Sys.DateTime dateTime;
 		public readonly byte[] Content;
+		FilePath filePath => FileSystem.getFilePath( Path );
 
-		public Item( IFileSystem.Path path, Sys.DateTime dateTime, byte[] content )
+		public FileItem( HybridFileSystem fileSystem, Path path, Sys.DateTime dateTime, byte[] content )
+			: base( fileSystem, path )
 		{
-			Path = path;
 			this.dateTime = dateTime;
 			Content = content;
 		}
@@ -26,76 +38,97 @@ public sealed class HybridFileSystem : IFileSystem
 		{
 			return dateTime;
 		}
+
+		public override byte[] ReadAllBytes()
+		{
+			return filePath.ReadAllBytes();
+		}
+
+		public override void WriteAllBytes( byte[] bytes )
+		{
+			filePath.WriteAllBytes( bytes );
+		}
+
+		public override string GetDiagnosticPathName()
+		{
+			return filePath.Path;
+		}
+	}
+
+	sealed class FakeItem : MyItem
+	{
+		readonly Sys.DateTime dateTime;
+		byte[] content;
+
+		public FakeItem( HybridFileSystem fileSystem, Path path, Sys.DateTime dateTime, byte[] content )
+			: base( fileSystem, path )
+		{
+			this.dateTime = dateTime;
+			this.content = content;
+		}
+
+		public Sys.DateTime GetTimeModified()
+		{
+			return dateTime;
+		}
+
+		public override byte[] ReadAllBytes()
+		{
+			byte[] result = new byte[content.Length];
+			Sys.Array.Copy( content, result, content.Length );
+			return result;
+		}
+
+		public override void WriteAllBytes( byte[] bytes )
+		{
+			content = new byte[bytes.Length];
+			Sys.Array.Copy( bytes, content, content.Length );
+		}
+
+		public override string GetDiagnosticPathName()
+		{
+			return Path.Content;
+		}
 	}
 
 	public DirectoryPath Root { get; }
-	readonly Dictionary<IFileSystem.Path, Item> items = new();
+	readonly Dictionary<Path, MyItem> items = new();
 
 	public HybridFileSystem( DirectoryPath root )
 	{
 		Root = root;
-	}
-
-	public void AddFakeItem( IFileSystem.Path path, Sys.DateTime dateTime, string content )
-	{
-		Item item = new Item( path, dateTime, DotNetHelpers.BomlessUtf8.GetBytes( content ) );
-		items.Add( path, item );
-	}
-
-	IEnumerable<IFileSystem.Path> IFileSystem.EnumerateItems()
-	{
 		foreach( FilePath filePath in Root.EnumerateFiles( "*", true ) )
 		{
 			if( filePath.GetFileNameAndExtension().StartsWith2( "." ) )
 				continue;
-			if( filePath.GetDirectoryPatrh().GetDirectoryName().StartsWith2( "." ) )
+			if( filePath.Directory.GetDirectoryName().StartsWith2( "." ) )
 				continue;
-			yield return IFileSystem.Path.Of( normalize( Root.GetRelativePath( filePath ) ) );
+			Path path = Path.Of( normalize( Root.GetRelativePath( filePath ) ) );
+			CreateItem( path );
 		}
-		foreach( IFileSystem.Path path in items.Keys )
-			yield return path;
 	}
+
+	public Item AddFakeItem( Path path, Sys.DateTime dateTime, string content )
+	{
+		FakeItem item = new FakeItem( this, path, dateTime, DotNetHelpers.BomlessUtf8.GetBytes( content ) );
+		items.Add( path, item );
+		return item;
+	}
+
+	public override IEnumerable<Item> EnumerateItems() => items.Values;
 
 	static string normalize( string s )
 	{
 		return s.Replace( '\\', '/' );
 	}
 
-	IEnumerable<IFileSystem.Path> IFileSystem.EnumerateItems( IFileSystem.Path path )
-	{
-		DirectoryPath localRoot = Root.RelativeFile( path.Content ).Directory;
-		foreach( FilePath filePath in localRoot.EnumerateFiles( "*", true ) )
-		{
-			if( filePath.GetFileNameAndExtension().StartsWith2( "." ) )
-				continue;
-			if( filePath.GetDirectoryPatrh().GetDirectoryName().StartsWith2( "." ) )
-				continue;
-			yield return IFileSystem.Path.Of( normalize( localRoot.GetRelativePath( filePath ) ) );
-		}
-	}
+	FilePath getFilePath( Path path ) => Root.RelativeFile( path.Content );
 
-	byte[] IFileSystem.ReadAllBytes( IFileSystem.Path path )
+	public override Item CreateItem( Path path )
 	{
-		if( items.TryGetValue( path, out Item? value ) )
-			return value.Content;
-		FilePath filePath = filePathFromPathName( path );
-		return filePath.ReadAllBytes();
-	}
-
-	void IFileSystem.WriteAllBytes( IFileSystem.Path path, byte[] bytes )
-	{
-		Assert( !items.ContainsKey( path ) );
-		FilePath filePath = filePathFromPathName( path );
-		filePath.WriteAllBytes( bytes );
-	}
-
-	FilePath filePathFromPathName( IFileSystem.Path path )
-	{
-		return Root.RelativeFile( path.Content );
-	}
-
-	public string GetDiagnosticFullPath( IFileSystem.Path path )
-	{
-		return filePathFromPathName( path ).Path;
+		FilePath filePath = getFilePath( path );
+		FileItem item = new FileItem( this, path, filePath.CreationTimeUtc, filePath.ReadAllBytes() );
+		items.Add( path, item );
+		return item;
 	}
 }
