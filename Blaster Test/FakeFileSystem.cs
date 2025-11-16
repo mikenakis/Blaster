@@ -3,7 +3,7 @@ namespace Blaster_Test;
 using System.Collections.Generic;
 using Blaster;
 using MikeNakis.Kit;
-using MikeNakis.Kit.FileSystem;
+using static MikeNakis.Kit.GlobalStatics;
 using Sys = System;
 
 sealed class FakeFileSystem : FileSystem
@@ -11,15 +11,16 @@ sealed class FakeFileSystem : FileSystem
 	sealed class FakeItem : Item
 	{
 		readonly FakeFileSystem fileSystem;
-		readonly Path path;
+		readonly FileName fileName;
 		readonly Sys.DateTime dateTime;
 		byte[] content = Sys.Array.Empty<byte>();
-		public override Path Path => path;
+		public override FileName FileName => fileName;
 
-		public FakeItem( FakeFileSystem fileSystem, Path path, Sys.DateTime dateTime )
+		public FakeItem( FakeFileSystem fileSystem, FileName fileName, Sys.DateTime dateTime )
+			: base( fileSystem )
 		{
 			this.fileSystem = fileSystem;
-			this.path = path;
+			this.fileName = fileName;
 			this.dateTime = dateTime;
 		}
 
@@ -39,26 +40,28 @@ sealed class FakeFileSystem : FileSystem
 		{
 			content = new byte[bytes.Length];
 			Sys.Array.Copy( bytes, content, content.Length );
-			fileSystem.possiblyPersist( path, bytes );
+			fileSystem.possiblyPersist( fileName, bytes );
 		}
 
 		public override string GetDiagnosticPathName()
 		{
-			return fileSystem.getFilePathName( Path );
+			return fileSystem.getFilePathName( FileName );
 		}
+
+		public override string ToString() => $"{GetType().Name} {fileName}";
 	}
 
 	readonly Clock clock;
-	readonly DirectoryPath? persistenceDirectoryPath;
-	readonly Dictionary<Path, FakeItem> items = new();
+	readonly MikeNakis.Kit.FileSystem.DirectoryPath? persistenceDirectoryPath;
+	readonly Dictionary<FileName, FakeItem> items = new();
 
-	public FakeFileSystem( Clock clock, DirectoryPath? persistenceDirectoryPath = null )
+	public FakeFileSystem( Clock clock, MikeNakis.Kit.FileSystem.DirectoryPath? persistenceDirectoryPath = null )
 	{
 		this.clock = clock;
 		this.persistenceDirectoryPath = persistenceDirectoryPath;
 	}
 
-	public Item AddItem( Path path, Sys.DateTime dateTime, string content )
+	public Item AddItem( FileName path, Sys.DateTime dateTime, string content )
 	{
 		FakeItem item = new FakeItem( this, path, dateTime );
 		items.Add( path, item );
@@ -68,23 +71,32 @@ sealed class FakeFileSystem : FileSystem
 
 	public override IEnumerable<Item> EnumerateItems() => items.Values;
 
-	void possiblyPersist( Path path, byte[] bytes )
+	void possiblyPersist( FileName path, byte[] bytes )
 	{
 		if( persistenceDirectoryPath != null )
-			persistenceDirectoryPath.RelativeFile( path.Content ).WriteAllBytes( bytes );
+		{
+			string pathName = path.Content;
+			Assert( pathName[0] == '/' );
+			persistenceDirectoryPath.RelativeFile( pathName[1..] ).WriteAllBytes( bytes );
+		}
 	}
 
-	string getFilePathName( Path path )
+	string getFilePathName( FileName path )
 	{
 		if( persistenceDirectoryPath == null )
 			return path.Content;
 		return persistenceDirectoryPath.RelativeFile( path.Content ).Path;
 	}
 
-	public override Item CreateItem( Path path )
+	public override Item CreateItem( FileName path )
 	{
 		FakeItem item = new FakeItem( this, path, clock.GetUniversalTime() );
 		items.Add( path, item );
 		return item;
+	}
+
+	public override bool Exists( FileName fileName )
+	{
+		return items.ContainsKey( fileName );
 	}
 }

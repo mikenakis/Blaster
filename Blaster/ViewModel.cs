@@ -21,7 +21,7 @@ abstract class ViewModel
 
 sealed class ContentViewModel : ViewModel
 {
-	public override string TypeName => Item.Path.Content;
+	public override string TypeName => Item.FileName.Content;
 	public override string Title => TypeName; //TODO: get from frontmatter
 	public override string Content => HtmlText;
 	public readonly string HtmlText;
@@ -35,9 +35,9 @@ sealed class ContentViewModel : ViewModel
 
 sealed class CollectionViewModel : ViewModel
 {
-	public override string TypeName => $"{Item.Path.Content}[]";
+	public override string TypeName => $"{Item.FileName.Content}[]";
 	public override string Title => TypeName;
-	public override string Content => Paths.Select( path => path.Path.Content ).MakeString( ", " );
+	public override string Content => Paths.Select( path => path.FileName.Content ).MakeString( ", " );
 	public readonly ImmutableArray<FileSystem.Item> Paths;
 
 	public CollectionViewModel( FileSystem.Item item, ImmutableArray<FileSystem.Item> paths )

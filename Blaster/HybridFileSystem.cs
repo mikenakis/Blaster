@@ -4,17 +4,19 @@ using System.Collections.Generic;
 using MikeNakis.Kit;
 using MikeNakis.Kit.Extensions;
 using MikeNakis.Kit.FileSystem;
+using static MikeNakis.Kit.GlobalStatics;
 using Sys = System;
 
 public sealed class HybridFileSystem : FileSystem
 {
 	abstract class MyItem : Item
 	{
-		public readonly HybridFileSystem FileSystem;
-		readonly Path path;
-		public override Path Path => path;
+		public readonly new HybridFileSystem FileSystem;
+		readonly FileName path;
+		public override FileName FileName => path;
 
-		protected MyItem( HybridFileSystem fileSystem, Path path )
+		protected MyItem( HybridFileSystem fileSystem, FileName path )
+			: base( fileSystem )
 		{
 			FileSystem = fileSystem;
 			this.path = path;
@@ -25,9 +27,9 @@ public sealed class HybridFileSystem : FileSystem
 	{
 		readonly Sys.DateTime dateTime;
 		public readonly byte[] Content;
-		FilePath filePath => FileSystem.getFilePath( Path );
+		FilePath filePath => FileSystem.getFilePath( FileName );
 
-		public FileItem( HybridFileSystem fileSystem, Path path, Sys.DateTime dateTime, byte[] content )
+		public FileItem( HybridFileSystem fileSystem, FileName path, Sys.DateTime dateTime, byte[] content )
 			: base( fileSystem, path )
 		{
 			this.dateTime = dateTime;
@@ -60,7 +62,7 @@ public sealed class HybridFileSystem : FileSystem
 		readonly Sys.DateTime dateTime;
 		byte[] content;
 
-		public FakeItem( HybridFileSystem fileSystem, Path path, Sys.DateTime dateTime, byte[] content )
+		public FakeItem( HybridFileSystem fileSystem, FileName path, Sys.DateTime dateTime, byte[] content )
 			: base( fileSystem, path )
 		{
 			this.dateTime = dateTime;
@@ -87,12 +89,12 @@ public sealed class HybridFileSystem : FileSystem
 
 		public override string GetDiagnosticPathName()
 		{
-			return Path.Content;
+			return FileName.Content;
 		}
 	}
 
 	public DirectoryPath Root { get; }
-	readonly Dictionary<Path, MyItem> items = new();
+	readonly Dictionary<FileName, MyItem> items = new();
 
 	public HybridFileSystem( DirectoryPath root )
 	{
@@ -103,12 +105,12 @@ public sealed class HybridFileSystem : FileSystem
 				continue;
 			if( filePath.Directory.GetDirectoryName().StartsWith2( "." ) )
 				continue;
-			Path path = Path.Of( normalize( Root.GetRelativePath( filePath ) ) );
+			var path = FileName.Absolute( normalize( '/' + Root.GetRelativePath( filePath ) ) );
 			CreateItem( path );
 		}
 	}
 
-	public Item AddFakeItem( Path path, Sys.DateTime dateTime, string content )
+	public Item AddFakeItem( FileName path, Sys.DateTime dateTime, string content )
 	{
 		FakeItem item = new FakeItem( this, path, dateTime, DotNetHelpers.BomlessUtf8.GetBytes( content ) );
 		items.Add( path, item );
@@ -122,13 +124,23 @@ public sealed class HybridFileSystem : FileSystem
 		return s.Replace( '\\', '/' );
 	}
 
-	FilePath getFilePath( Path path ) => Root.RelativeFile( path.Content );
+	FilePath getFilePath( FileName path )
+	{
+		string pathName = path.Content;
+		Assert( pathName.StartsWith2( "/" ) );
+		return Root.RelativeFile( pathName[1..] );
+	}
 
-	public override Item CreateItem( Path path )
+	public override Item CreateItem( FileName path )
 	{
 		FilePath filePath = getFilePath( path );
 		FileItem item = new FileItem( this, path, filePath.CreationTimeUtc, filePath.ReadAllBytes() );
 		items.Add( path, item );
 		return item;
+	}
+
+	public override bool Exists( FileName fileName )
+	{
+		return items.ContainsKey( fileName );
 	}
 }

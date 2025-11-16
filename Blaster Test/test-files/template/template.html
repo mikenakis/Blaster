@@ -3,7 +3,13 @@
 	<head>
 		<title>{{title}}</title>
     </head>
-    <body>
-		{{content}}
+	<body>
+		<h2>This is body</h2>
+		<div>content: {{content}}</div>
+		<content-view applies-to="*.md">
+			<h2>This is content-view</h2>
+			<h3>Title={{title}}</h3>
+			<div style="background: #201818;">Content={{content}}</div>
+		</content-view>
 	</body>
 </html>

@@ -22,7 +22,7 @@ public class T101_BlasterTests : TestClass
 	{
 		FileSystem sourceFileSystem = new FakeFileSystem( fakeClock );
 		FileSystem templateFileSystem = new FakeFileSystem( fakeClock );
-		templateFileSystem.CreateItem( FileSystem.Path.Of( "template.html" ) ).WriteAllText( """
+		templateFileSystem.CreateItem( FileSystem.FileName.Absolute( "/template.html" ) ).WriteAllText( """
 <!DOCTYPE html>
 <html>
 """ );
@@ -31,7 +31,27 @@ public class T101_BlasterTests : TestClass
 		BlasterEngine.Run( sourceFileSystem, templateFileSystem, targetFileSystem, diagnosticConsumer );
 		Assert( diagnostics.Count == 1 );
 		Assert( diagnostics[0] is HtmlParseDiagnostic );
-		Assert( ((HtmlParseDiagnostic)diagnostics[0]).HtmlParseErrorCode == Html.HtmlParseErrorCode.TagNotClosed );
+		Assert( ((HtmlParseDiagnostic)diagnostics[0]).HtmlParseError.Code == Html.HtmlParseErrorCode.TagNotClosed );
+		return;
+
+		void diagnosticConsumer( Diagnostic diagnostic )
+		{
+			diagnostics.Add( diagnostic );
+		}
+	}
+
+	[VSTesting.TestMethod]
+	public void T102_Broken_Link_Is_Caught()
+	{
+		FileSystem sourceFileSystem = new FakeFileSystem( fakeClock );
+		sourceFileSystem.CreateItem( FileSystem.FileName.Absolute( "/index.md" ) ).WriteAllText( "This is /index.md and this is a broken link [](nonexistent.md)" );
+		FileSystem templateFileSystem = new FakeFileSystem( fakeClock );
+		FileSystem targetFileSystem = new FakeFileSystem( fakeClock );
+		List<Diagnostic> diagnostics = new();
+		BlasterEngine.Run( sourceFileSystem, templateFileSystem, targetFileSystem, diagnosticConsumer );
+		Assert( diagnostics.Count == 1 );
+		Assert( diagnostics[0] is BrokenLinkDiagnostic );
+		Assert( ((BrokenLinkDiagnostic)diagnostics[0]).FileName.Content == "/nonexistent.md" );
 		return;
 
 		void diagnosticConsumer( Diagnostic diagnostic )
@@ -44,9 +64,9 @@ public class T101_BlasterTests : TestClass
 	public void T102_Root_Template_Works()
 	{
 		FileSystem sourceFileSystem = new FakeFileSystem( fakeClock );
-		sourceFileSystem.CreateItem( FileSystem.Path.Of( "index.md" ) ).WriteAllText( "This is index.md" );
+		sourceFileSystem.CreateItem( FileSystem.FileName.Absolute( "/index.md" ) ).WriteAllText( "This is /index.md" );
 		FileSystem templateFileSystem = new FakeFileSystem( fakeClock );
-		templateFileSystem.CreateItem( FileSystem.Path.Of( "template.html" ) ).WriteAllText( """
+		templateFileSystem.CreateItem( FileSystem.FileName.Absolute( "/template.html" ) ).WriteAllText( """
 <!DOCTYPE html>
 <html>
 	<head>
@@ -63,10 +83,10 @@ public class T101_BlasterTests : TestClass
 <!DOCTYPE html>
 <html>
 	<head>
-		<title>index.md</title>
+		<title>/index.md</title>
     </head>
     <body>
-		<p>This is index.md</p>
+		<p>This is /index.md</p>
 	</body>
 </html>
 """;

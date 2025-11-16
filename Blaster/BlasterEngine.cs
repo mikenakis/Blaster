@@ -53,31 +53,31 @@ public sealed class BlasterEngine
 
 	public void Run()
 	{
-		foreach( FileSystem.Item contentItem in templateFileSystem.EnumerateItems() )
+		foreach( FileSystem.Item templateItem in templateFileSystem.EnumerateItems() )
 		{
-			if( contentItem.Path.Extension != ".html" )
+			if( templateItem.FileName.Extension != ".html" )
 			{
-				outputFileSystem.CopyFrom( contentItem );
+				outputFileSystem.CopyFrom( templateItem );
 				continue;
 			}
-			extractViews( rootView, contentItem );
+			extractViews( rootView, templateItem );
 		}
 
 		Helpers.PrintTree( rootView, view => views.Where( v => v.Parent == view ), view => view.ToString(), s => Log.Info( s ) );
 
 		foreach( FileSystem.Item contentItem in contentFileSystem.EnumerateItems() )
 		{
-			if( contentItem.Path.Content.StartsWith2( "_" ) ) //TODO: get rid of
+			if( contentItem.FileName.Content.StartsWith2( "_" ) ) //TODO: get rid of
 				continue;
-			if( contentItem.Path.Extension != ".md" )
+			if( contentItem.FileName.Extension != ".md" )
 			{
 				outputFileSystem.CopyFrom( contentItem );
 				continue;
 			}
-			ViewModel viewModel = getViewModel( contentItem, contentFileSystem );
+			ViewModel viewModel = getViewModel( contentItem );
 			View view = findView( viewModel, rootView );
 			string htmlText = view.Apply( viewModel );
-			FileSystem.Item outputItem = outputFileSystem.CreateItem( contentItem.Path.WithExtension( ".html" ) );
+			FileSystem.Item outputItem = outputFileSystem.CreateItem( contentItem.FileName.WithoutExtension.WithExtension( ".html" ) );
 			outputItem.WriteAllText( htmlText );
 		}
 	}
@@ -106,10 +106,10 @@ public sealed class BlasterEngine
 		Html.HtmlDocument templateDocument = new Html.HtmlDocument();
 		templateDocument.LoadHtml( template );
 		foreach( Html.HtmlParseError parseError in templateDocument.ParseErrors )
-			issueDiagnostic( new HtmlParseDiagnostic( Severity.Error, templateItem, parseError.Line, parseError.LinePosition, parseError.Code, parseError.Reason ) );
+			issueDiagnostic( new HtmlParseDiagnostic( templateItem, parseError ) );// parseError.Line, parseError.LinePosition, parseError.Code, parseError.Reason ) );
 		Html.HtmlNode htmlNode = templateDocument.DocumentNode;
 		htmlNode.Remove(); //try this
-		View documentView = new ContentView( parentView, htmlNode, Name.Of( templateItem.Path.Content ), new RegEx.Regex( ".*" ) );
+		View documentView = new ContentView( parentView, htmlNode, Name.Of( templateItem.FileName.Content ), new RegEx.Regex( ".*" ) );
 		views.Add( documentView );
 		recurse( documentView, htmlNode, templateItem );
 		foreach( View view in views )
@@ -169,19 +169,19 @@ public sealed class BlasterEngine
 		}
 	}
 
-	static ViewModel getViewModel( FileSystem.Item contentItem, FileSystem contentFileSystem )
+	ViewModel getViewModel( FileSystem.Item contentItem )
 	{
 		string markdownText = contentItem.ReadAllText();
 
 		if( markdownText.IsWhitespace() )
 		{
 			SysText.StringBuilder stringBuilder = new();
-			ImmutableArray<FileSystem.Item> siblingItems = contentFileSystem.EnumerateSiblingItems( contentItem ).Where( siblingItem => siblingItem.Path.Content.EndsWith2( ".md" ) ).ToImmutableArray();
+			ImmutableArray<FileSystem.Item> siblingItems = contentItem.FileSystem.EnumerateSiblingItems( contentItem ).Where( siblingItem => siblingItem.FileName.HasExtension( ".md" ) ).ToImmutableArray();
 			return new CollectionViewModel( contentItem, siblingItems );
 		}
 
 		string htmlText = convert( markdownText );
-		htmlText = fixLinks( htmlText );
+		htmlText = fixLinks( htmlText, contentItem );
 		return new ContentViewModel( contentItem, htmlText );
 	}
 
@@ -206,8 +206,9 @@ public sealed class BlasterEngine
 		}
 	}
 
-	static string fixLinks( string htmlText )
+	string fixLinks( string htmlText, FileSystem.Item contentItem )
 	{
+		FileSystem.DirectoryName directoryName = contentItem.FileName.DirectoryName;
 		if( htmlText == "" )
 			return htmlText;
 		Html.HtmlDocument htmlDocument = new();
@@ -222,8 +223,13 @@ public sealed class BlasterEngine
 				continue;
 			if( href.EndsWith2( ".md" ) )
 			{
-				href = FileSystem.Path.Of( hrefAttribute.Value ).WithExtension( ".html" ).Content;
-				hrefAttribute.Value = href;
+				FileSystem.FileName fileName = FileSystem.FileName.AbsoluteOrRelative( hrefAttribute.Value, directoryName );
+				if( !contentItem.FileSystem.Exists( fileName ) )
+				{
+					//TODO: This transformation should be applied on the markdown, not on the html.
+					issueDiagnostic( new BrokenLinkDiagnostic( contentItem, hrefAttribute, fileName ) );
+				}
+				hrefAttribute.Value = fileName.WithoutExtension.WithExtension( ".html" ).Content;
 			}
 		}
 		return htmlDocument.DocumentNode.OuterHtml;

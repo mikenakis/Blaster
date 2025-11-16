@@ -29,9 +29,9 @@ public sealed class BlasterMain
 			Sys.Console.WriteLine( $"INFO: Output: {outputDirectoryPath}" );
 
 			HybridFileSystem contentFileSystem = new HybridFileSystem( contentDirectoryPath );
-			contentFileSystem.AddFakeItem( FileSystem.Path.Of( "index.md" ), DotNetClock.Instance.GetUniversalTime(), "[Pages](page/)\r\n\r\n[Posts](post/)" );
-			contentFileSystem.AddFakeItem( FileSystem.Path.Of( "post/index.md" ), DotNetClock.Instance.GetUniversalTime(), "" );
-			contentFileSystem.AddFakeItem( FileSystem.Path.Of( "page/index.md" ), DotNetClock.Instance.GetUniversalTime(), "" );
+			contentFileSystem.AddFakeItem( FileSystem.FileName.Absolute( "index.md" ), DotNetClock.Instance.GetUniversalTime(), "[Pages](page/)\r\n\r\n[Posts](post/)" );
+			contentFileSystem.AddFakeItem( FileSystem.FileName.Absolute( "post/index.md" ), DotNetClock.Instance.GetUniversalTime(), "" );
+			contentFileSystem.AddFakeItem( FileSystem.FileName.Absolute( "page/index.md" ), DotNetClock.Instance.GetUniversalTime(), "" );
 			FileSystem templateFileSystem = new HybridFileSystem( templateDirectoryPath );
 			FileSystem outputFileSystem = new HybridFileSystem( outputDirectoryPath );
 

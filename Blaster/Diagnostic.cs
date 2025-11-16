@@ -50,14 +50,27 @@ public abstract class Diagnostic
 
 public sealed class HtmlParseDiagnostic : Diagnostic
 {
-	public Html.HtmlParseErrorCode HtmlParseErrorCode { get; }
-	public override string Message { get; }
+	public Html.HtmlParseError HtmlParseError { get; }
+	public override string Message => HtmlParseError.Reason;
 
-	public HtmlParseDiagnostic( Severity severity, FileSystem.Item sourceItem, int lineNumber, int columnNumber, Html.HtmlParseErrorCode htmlParseErrorCode, string message )
-		: base( severity, sourceItem, lineNumber, columnNumber )
+	public HtmlParseDiagnostic( FileSystem.Item sourceItem, Html.HtmlParseError htmlParseError )
+		: base( Severity.Error, sourceItem, htmlParseError.Line, htmlParseError.LinePosition )
 	{
-		HtmlParseErrorCode = htmlParseErrorCode;
-		Message = message;
+		HtmlParseError = htmlParseError;
+	}
+}
+
+public sealed class BrokenLinkDiagnostic : Diagnostic
+{
+	public Html.HtmlAttribute HrefAttribute { get; }
+	public FileSystem.FileName FileName { get; }
+	public override string Message => $"Broken link: {FileName}";
+
+	public BrokenLinkDiagnostic( FileSystem.Item sourceItem, Html.HtmlAttribute hrefAttribute, FileSystem.FileName fileName )
+		: base( Severity.Error, sourceItem, hrefAttribute.Line, hrefAttribute.LinePosition )
+	{
+		HrefAttribute = hrefAttribute;
+		FileName = fileName;
 	}
 }
 
