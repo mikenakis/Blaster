@@ -1,6 +1,7 @@
 namespace Blaster;
 
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.Linq;
 using MikeNakis.Kit.Collections;
 using static MikeNakis.Kit.GlobalStatics;
@@ -9,11 +10,31 @@ using SysText = System.Text;
 
 static class Helpers
 {
-	public static string GetLine( string text, int lineNumber )
+	public static string GetLine( FileSystem.Item item, int lineNumber )
 	{
 		if( lineNumber == 0 )
 			return "";
+		string text = item.ReadAllText();
 		return text.Split( '\n' ).Skip( lineNumber - 1 ).First();
+	}
+
+	internal static (int lineNumber, int columnNumber, int length) GetSpanInformation( FileSystem.Item item, int start, int end )
+	{
+		string text = item.ReadAllText();
+		ImmutableArray<string> lines = text.Split( '\n' ).ToImmutableArray();
+		int offset = 0;
+		for( int i = 0; i < lines.Length; i++ )
+		{
+			int columnNumber = start - offset;
+			if( columnNumber < lines[i].Length )
+			{
+				int length = end - start + 1;
+				if( columnNumber + length > lines[i].Length )
+					length = lines[i].Length - columnNumber;
+				return (i + 1, columnNumber, length);
+			}
+		}
+		return (0, 0, 0);
 	}
 
 	public static void PrintTree<T>( T rootNode, Sys.Func<T, IEnumerable<T>> breeder, Sys.Func<T, string> stringizer, Sys.Action<string> emitter, int indentation = 1 )

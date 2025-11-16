@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using MikeNakis.Kit;
 using MikeNakis.Kit.Extensions;
 using MikeNakis.Kit.FileSystem;
+using static System.MemoryExtensions;
 using static MikeNakis.Kit.GlobalStatics;
 using Sys = System;
 
@@ -15,12 +16,14 @@ public sealed class HybridFileSystem : FileSystem
 		readonly FileName path;
 		public override FileName FileName => path;
 
-		protected MyItem( HybridFileSystem fileSystem, FileName path )
+		protected MyItem( HybridFileSystem fileSystem, FileName fileName )
 			: base( fileSystem )
 		{
 			FileSystem = fileSystem;
-			this.path = path;
+			this.path = fileName;
 		}
+
+		public override string ToString() => $"{GetType().Name} \"{FileName}\"";
 	}
 
 	sealed class FileItem : MyItem
@@ -29,32 +32,17 @@ public sealed class HybridFileSystem : FileSystem
 		public readonly byte[] Content;
 		FilePath filePath => FileSystem.getFilePath( FileName );
 
-		public FileItem( HybridFileSystem fileSystem, FileName path, Sys.DateTime dateTime, byte[] content )
-			: base( fileSystem, path )
+		public FileItem( HybridFileSystem fileSystem, FileName fileName, Sys.DateTime dateTime, byte[] content )
+			: base( fileSystem, fileName )
 		{
 			this.dateTime = dateTime;
 			Content = content;
 		}
 
-		public Sys.DateTime GetTimeModified()
-		{
-			return dateTime;
-		}
-
-		public override byte[] ReadAllBytes()
-		{
-			return filePath.ReadAllBytes();
-		}
-
-		public override void WriteAllBytes( byte[] bytes )
-		{
-			filePath.WriteAllBytes( bytes );
-		}
-
-		public override string GetDiagnosticPathName()
-		{
-			return filePath.Path;
-		}
+		public Sys.DateTime GetTimeModified() => dateTime;
+		public override byte[] ReadAllBytes() => filePath.ReadAllBytes();
+		public override void WriteAllBytes( byte[] bytes ) => filePath.WriteAllBytes( bytes );
+		public override string GetDiagnosticPathName() => filePath.Path;
 	}
 
 	sealed class FakeItem : MyItem
@@ -62,8 +50,8 @@ public sealed class HybridFileSystem : FileSystem
 		readonly Sys.DateTime dateTime;
 		byte[] content;
 
-		public FakeItem( HybridFileSystem fileSystem, FileName path, Sys.DateTime dateTime, byte[] content )
-			: base( fileSystem, path )
+		public FakeItem( HybridFileSystem fileSystem, FileName fileName, Sys.DateTime dateTime, byte[] content )
+			: base( fileSystem, fileName )
 		{
 			this.dateTime = dateTime;
 			this.content = content;
@@ -76,21 +64,18 @@ public sealed class HybridFileSystem : FileSystem
 
 		public override byte[] ReadAllBytes()
 		{
-			byte[] result = new byte[content.Length];
-			Sys.Array.Copy( content, result, content.Length );
+			byte[] result = content.AsSpan().ToArray();
+			Assert( !result.ReferenceEquals( content ) );
 			return result;
 		}
 
 		public override void WriteAllBytes( byte[] bytes )
 		{
-			content = new byte[bytes.Length];
-			Sys.Array.Copy( bytes, content, content.Length );
+			content = bytes.AsSpan().ToArray();
+			Assert( !content.ReferenceEquals( bytes ) );
 		}
 
-		public override string GetDiagnosticPathName()
-		{
-			return FileName.Content;
-		}
+		public override string GetDiagnosticPathName() => FileName.Content;
 	}
 
 	public DirectoryPath Root { get; }
@@ -105,15 +90,22 @@ public sealed class HybridFileSystem : FileSystem
 				continue;
 			if( filePath.Directory.GetDirectoryName().StartsWith2( "." ) )
 				continue;
-			var path = FileName.Absolute( normalize( '/' + Root.GetRelativePath( filePath ) ) );
-			CreateItem( path );
+			FileName fileName = FileName.Absolute( normalize( '/' + Root.GetRelativePath( filePath ) ) );
+			createItem( fileName );
+		}
+
+		void createItem( FileName fileName )
+		{
+			FilePath filePath = getFilePath( fileName );
+			FileItem item = new FileItem( this, fileName, filePath.CreationTimeUtc, filePath.ReadAllBytes() );
+			items.Add( fileName, item );
 		}
 	}
 
-	public Item AddFakeItem( FileName path, Sys.DateTime dateTime, string content )
+	public Item AddFakeItem( FileName fileName, Sys.DateTime dateTime, string content )
 	{
-		FakeItem item = new FakeItem( this, path, dateTime, DotNetHelpers.BomlessUtf8.GetBytes( content ) );
-		items.Add( path, item );
+		FakeItem item = new FakeItem( this, fileName, dateTime, DotNetHelpers.BomlessUtf8.GetBytes( content ) );
+		items.Add( fileName, item );
 		return item;
 	}
 
@@ -124,23 +116,34 @@ public sealed class HybridFileSystem : FileSystem
 		return s.Replace( '\\', '/' );
 	}
 
-	FilePath getFilePath( FileName path )
+	FilePath getFilePath( FileName fileName )
 	{
-		string pathName = path.Content;
+		string pathName = fileName.Content;
 		Assert( pathName.StartsWith2( "/" ) );
 		return Root.RelativeFile( pathName[1..] );
 	}
 
-	public override Item CreateItem( FileName path )
+	public override Item CreateItem( FileName fileName )
 	{
-		FilePath filePath = getFilePath( path );
-		FileItem item = new FileItem( this, path, filePath.CreationTimeUtc, filePath.ReadAllBytes() );
-		items.Add( path, item );
-		return item;
+		FilePath filePath = getFilePath( fileName );
+		using( filePath.CreateBinary() )
+		{
+			FileItem item = new FileItem( this, fileName, filePath.CreationTimeUtc, Sys.Array.Empty<byte>() );
+			items.Add( fileName, item );
+			return item;
+		}
 	}
 
-	public override bool Exists( FileName fileName )
+	public override void Delete( FileName fileName )
 	{
-		return items.ContainsKey( fileName );
+		Item item = items[fileName];
+		items.Remove( fileName );
+		if( item is FileItem )
+		{
+			FilePath filePath = getFilePath( fileName );
+			filePath.Delete();
+		}
 	}
+
+	public override bool Exists( FileName fileName ) => items.ContainsKey( fileName );
 }

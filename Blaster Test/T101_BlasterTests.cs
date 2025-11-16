@@ -36,6 +36,8 @@ public class T101_BlasterTests : TestClass
 
 		void diagnosticConsumer( Diagnostic diagnostic )
 		{
+			foreach( string line in diagnostic.ToString().Split( "\n" ).Select( s => s.TrimEnd() ) )
+				Log.Debug( line );
 			diagnostics.Add( diagnostic );
 		}
 	}
@@ -56,6 +58,8 @@ public class T101_BlasterTests : TestClass
 
 		void diagnosticConsumer( Diagnostic diagnostic )
 		{
+			foreach( string line in diagnostic.ToString().Split( "\n" ).Select( s => s.TrimEnd() ) )
+				Log.Debug( line );
 			diagnostics.Add( diagnostic );
 		}
 	}
@@ -110,8 +114,9 @@ public class T101_BlasterTests : TestClass
 	{
 		DirectoryPath testFilesDirectoryPath = getTestDirectory().Directory( "test-files" );
 		FileSystem sourceFileSystem = new HybridFileSystem( /*fakeClock,*/ testFilesDirectoryPath.Directory( "content" ) );
-		FileSystem templateFileSystem = new FakeFileSystem( fakeClock, testFilesDirectoryPath.Directory( "template" ) );
-		FileSystem targetFileSystem = new FakeFileSystem( fakeClock, testFilesDirectoryPath.Directory( "target" ) );
+		FileSystem templateFileSystem = new HybridFileSystem( /*fakeClock,*/ testFilesDirectoryPath.Directory( "template" ) );
+		FileSystem targetFileSystem = new HybridFileSystem( /*fakeClock,*/ testFilesDirectoryPath.Directory( "output" ) );
+		targetFileSystem.Clear();
 
 		BlasterEngine.Run( sourceFileSystem, templateFileSystem, targetFileSystem, diagnosticConsumer );
 

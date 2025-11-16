@@ -61,42 +61,40 @@ sealed class FakeFileSystem : FileSystem
 		this.persistenceDirectoryPath = persistenceDirectoryPath;
 	}
 
-	public Item AddItem( FileName path, Sys.DateTime dateTime, string content )
+	public Item AddItem( FileName fileName, Sys.DateTime dateTime, string content )
 	{
-		FakeItem item = new FakeItem( this, path, dateTime );
-		items.Add( path, item );
+		FakeItem item = new FakeItem( this, fileName, dateTime );
+		items.Add( fileName, item );
 		item.WriteAllBytes( DotNetHelpers.BomlessUtf8.GetBytes( content ) );
 		return item;
 	}
 
 	public override IEnumerable<Item> EnumerateItems() => items.Values;
 
-	void possiblyPersist( FileName path, byte[] bytes )
+	void possiblyPersist( FileName fileName, byte[] bytes )
 	{
 		if( persistenceDirectoryPath != null )
 		{
-			string pathName = path.Content;
+			string pathName = fileName.Content;
 			Assert( pathName[0] == '/' );
 			persistenceDirectoryPath.RelativeFile( pathName[1..] ).WriteAllBytes( bytes );
 		}
 	}
 
-	string getFilePathName( FileName path )
+	string getFilePathName( FileName fileName )
 	{
 		if( persistenceDirectoryPath == null )
-			return path.Content;
-		return persistenceDirectoryPath.RelativeFile( path.Content ).Path;
+			return fileName.Content;
+		return persistenceDirectoryPath.RelativeFile( fileName.Content ).Path;
 	}
 
-	public override Item CreateItem( FileName path )
+	public override Item CreateItem( FileName fileName )
 	{
-		FakeItem item = new FakeItem( this, path, clock.GetUniversalTime() );
-		items.Add( path, item );
+		FakeItem item = new FakeItem( this, fileName, clock.GetUniversalTime() );
+		items.Add( fileName, item );
 		return item;
 	}
 
-	public override bool Exists( FileName fileName )
-	{
-		return items.ContainsKey( fileName );
-	}
+	public override void Delete( FileName fileName ) => items.Remove( fileName );
+	public override bool Exists( FileName fileName ) => items.ContainsKey( fileName );
 }

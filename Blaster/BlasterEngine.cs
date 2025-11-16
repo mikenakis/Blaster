@@ -8,7 +8,7 @@ using MikeNakis.Kit;
 using MikeNakis.Kit.Collections;
 using MikeNakis.Kit.Extensions;
 using static Markdig.MarkdownExtensions;
-using static MikeNakis.Kit.GlobalStatics;
+using static Markdig.Syntax.MarkdownObjectExtensions;
 using Html = HtmlAgilityPack;
 using Markdig = Markdig;
 using MarkdigSyntax = Markdig.Syntax;
@@ -55,31 +55,32 @@ public sealed class BlasterEngine
 	{
 		foreach( FileSystem.Item templateItem in templateFileSystem.EnumerateItems() )
 		{
-			if( templateItem.FileName.Extension != ".html" )
-			{
+			if( templateItem.FileName.Extension == ".html" )
+				extractViews( rootView, templateItem );
+			else
 				outputFileSystem.CopyFrom( templateItem );
-				continue;
-			}
-			extractViews( rootView, templateItem );
 		}
 
-		Helpers.PrintTree( rootView, view => views.Where( v => v.Parent == view ), view => view.ToString(), s => Log.Info( s ) );
+		Helpers.PrintTree( rootView, view => getChildViews( view, views ), view => view.ToString(), s => Log.Debug( s ) );
 
 		foreach( FileSystem.Item contentItem in contentFileSystem.EnumerateItems() )
 		{
 			if( contentItem.FileName.Content.StartsWith2( "_" ) ) //TODO: get rid of
 				continue;
-			if( contentItem.FileName.Extension != ".md" )
-			{
+			if( contentItem.FileName.Extension == ".md" )
+				htmlFromMarkdown( contentItem );
+			else
 				outputFileSystem.CopyFrom( contentItem );
-				continue;
-			}
-			ViewModel viewModel = getViewModel( contentItem );
-			View view = findView( viewModel, rootView );
-			string htmlText = view.Apply( viewModel );
-			FileSystem.Item outputItem = outputFileSystem.CreateItem( contentItem.FileName.WithoutExtension.WithExtension( ".html" ) );
-			outputItem.WriteAllText( htmlText );
 		}
+	}
+
+	void htmlFromMarkdown( FileSystem.Item contentItem )
+	{
+		ViewModel viewModel = getViewModel( contentItem );
+		View view = tryFindView( viewModel, rootView ).OrThrow(); //a view is guaranteed to be found because the root view matches everything
+		string htmlText = view.Apply( viewModel );
+		FileSystem.Item outputItem = outputFileSystem.CreateItem( contentItem.FileName.WithoutExtension.WithExtension( ".html" ) );
+		outputItem.WriteAllText( htmlText );
 	}
 
 	static Html.HtmlNode getRootViewHtmlNode()
@@ -100,25 +101,29 @@ public sealed class BlasterEngine
 		return templateDocument.DocumentNode;
 	}
 
-	void extractViews( View parentView, FileSystem.Item templateItem )
+	void extractViews( View rootView, FileSystem.Item templateItem )
 	{
-		string template = templateItem.ReadAllText();
-		Html.HtmlDocument templateDocument = new Html.HtmlDocument();
-		templateDocument.LoadHtml( template );
-		foreach( Html.HtmlParseError parseError in templateDocument.ParseErrors )
-			issueDiagnostic( new HtmlParseDiagnostic( templateItem, parseError ) );// parseError.Line, parseError.LinePosition, parseError.Code, parseError.Reason ) );
-		Html.HtmlNode htmlNode = templateDocument.DocumentNode;
-		htmlNode.Remove(); //try this
-		View documentView = new ContentView( parentView, htmlNode, Name.Of( templateItem.FileName.Content ), new RegEx.Regex( ".*" ) );
-		views.Add( documentView );
-		recurse( documentView, htmlNode, templateItem );
+		Html.HtmlNode htmlNode = getHtmlNode( templateItem );
+		View newRootView = new ContentView( rootView, htmlNode, Name.Of( templateItem.FileName.Content ), new RegEx.Regex( ".*" ) );
+		views.Add( newRootView );
+		recurse( newRootView, htmlNode, templateItem );
 		foreach( View view in views )
-			view.HtmlNode.Remove();
+			view.HtmlNode.Remove(); //FIXME this is wrong: the nodes should have been removed earlier.
 		return;
+
+		Html.HtmlNode getHtmlNode( FileSystem.Item templateItem )
+		{
+			string template = templateItem.ReadAllText();
+			Html.HtmlDocument templateDocument = new Html.HtmlDocument();
+			templateDocument.LoadHtml( template );
+			foreach( Html.HtmlParseError parseError in templateDocument.ParseErrors )
+				issueDiagnostic( new HtmlParseDiagnostic( templateItem, parseError ) );
+			return templateDocument.DocumentNode;
+		}
 
 		void recurse( View parentView, Html.HtmlNode parentNode, FileSystem.Item templateItem )
 		{
-			foreach( Html.HtmlNode childNode in parentNode.ChildNodes )
+			foreach( Html.HtmlNode childNode in parentNode.ChildNodes.ToImmutableArray() )
 			{
 				View? childView = createChildView( parentView, childNode, templateItem );
 				if( childView != null )
@@ -152,7 +157,12 @@ public sealed class BlasterEngine
 				static RegEx.Regex getAppliesTo( Html.HtmlNode htmlNode )
 				{
 					Html.HtmlAttribute? appliesToAttribute = htmlNode.Attributes.AttributesWithName( Constants.AppliesToAttributeName ).SingleOrDefault();
-					return new RegEx.Regex( appliesToAttribute?.Value ?? ".*" );
+					string pattern = appliesToAttribute?.Value ?? "*";
+					if( pattern.StartsWith2( "*." ) )
+						pattern = ".*\\." + pattern[2..];
+					else if( pattern.StartsWith2( "*" ) )
+						pattern = ".*" + pattern[1..];
+					return new RegEx.Regex( pattern );
 				}
 
 				Name getElementViewName( Html.HtmlNode htmlNode, FileSystem.Item templateItem )
@@ -160,7 +170,7 @@ public sealed class BlasterEngine
 					Html.HtmlAttribute? elementViewAttribute = htmlNode.Attributes.AttributesWithName( Constants.ElementViewAttributeName ).SingleOrDefault();
 					if( elementViewAttribute == null )
 					{
-						issueDiagnostic( new CustomDiagnostic( Severity.Error, templateItem, htmlNode.Line, htmlNode.LinePosition, $"Collection view is missing a '{Constants.ElementViewAttributeName}' attribute" ) );
+						issueDiagnostic( new CustomDiagnostic( Severity.Error, templateItem, htmlNode.Line, htmlNode.LinePosition, 1, $"Collection view is missing a '{Constants.ElementViewAttributeName}' attribute" ) );
 						return Name.Of( "" );
 					}
 					return Name.Of( elementViewAttribute.Value );
@@ -176,37 +186,43 @@ public sealed class BlasterEngine
 		if( markdownText.IsWhitespace() )
 		{
 			SysText.StringBuilder stringBuilder = new();
-			ImmutableArray<FileSystem.Item> siblingItems = contentItem.FileSystem.EnumerateSiblingItems( contentItem ).Where( siblingItem => siblingItem.FileName.HasExtension( ".md" ) ).ToImmutableArray();
+			ImmutableArray<FileSystem.Item> siblingItems = contentItem.FileSystem //
+				.EnumerateItems( contentItem.FileName.DirectoryName ) //
+				.Where( siblingItem => siblingItem.FileName.HasExtension( ".md" ) ) //
+				.ToImmutableArray();
 			return new CollectionViewModel( contentItem, siblingItems );
 		}
 
-		string htmlText = convert( markdownText );
+		string htmlText = convert( markdownText, contentItem );
 		htmlText = fixLinks( htmlText, contentItem );
 		return new ContentViewModel( contentItem, htmlText );
 	}
 
-	View findView( ViewModel viewModel, View? parentView )
+	View? tryFindView( ViewModel viewModel, View parentView )
 	{
-		while( true )
+		IEnumerable<View> visibleViews = getChildViews( parentView, views ).Collect();
+		IReadOnlyList<View> applicableViews = visibleViews.Where( a => a.IsApplicableTo( viewModel ) ).Collect();
+		if( applicableViews.Count > 0 )
 		{
-			IEnumerable<View> visibleViews = views.Where( view => view.Parent == parentView ).Collect();
-			IReadOnlyList<View> applicableViews = visibleViews.Where( a => a.IsApplicableTo( viewModel ) ).Collect();
-			if( applicableViews.Count > 0 )
+			if( applicableViews.Count > 1 )
 			{
-				if( applicableViews.Count > 1 )
-				{
-					Log.Warn( $"More than one view is applicable to {viewModel}" );
-					string underMessage = parentView == null ? "" : $" under {parentView.Name.Content}";
-					issueDiagnostic( new CustomDiagnostic( Severity.Warn, viewModel.Item, 1, 1, $"More than one view{underMessage} is applicable to {viewModel}" ) );
-				}
-				return applicableViews[0];
+				Log.Warn( $"More than one view is applicable to {viewModel}" );
+				string underMessage = parentView == null ? "" : $" under {parentView.Name.Content}";
+				issueDiagnostic( new CustomDiagnostic( Severity.Warn, viewModel.Item, 1, 1, 1, $"More than one view{underMessage} is applicable to {viewModel}" ) );
 			}
-			Assert( parentView != null ); //a view is guaranteed to be found because the root view matches everything
-			parentView = parentView.Parent;
+			return applicableViews[0];
 		}
+		if( parentView.IsApplicableTo( viewModel ) )
+			return parentView;
+		return null;
 	}
 
-	string fixLinks( string htmlText, FileSystem.Item contentItem )
+	IEnumerable<View> getChildViews( View parentView, IReadOnlyList<View> views )
+	{
+		return views.Where( view => view.Parent == parentView );
+	}
+
+	static string fixLinks( string htmlText, FileSystem.Item contentItem )
 	{
 		FileSystem.DirectoryName directoryName = contentItem.FileName.DirectoryName;
 		if( htmlText == "" )
@@ -224,34 +240,53 @@ public sealed class BlasterEngine
 			if( href.EndsWith2( ".md" ) )
 			{
 				FileSystem.FileName fileName = FileSystem.FileName.AbsoluteOrRelative( hrefAttribute.Value, directoryName );
-				if( !contentItem.FileSystem.Exists( fileName ) )
-				{
-					//TODO: This transformation should be applied on the markdown, not on the html.
-					issueDiagnostic( new BrokenLinkDiagnostic( contentItem, hrefAttribute, fileName ) );
-				}
 				hrefAttribute.Value = fileName.WithoutExtension.WithExtension( ".html" ).Content;
 			}
 		}
 		return htmlDocument.DocumentNode.OuterHtml;
 	}
 
-	static string convert( string markdownText )
+	string convert( string markdownText, FileSystem.Item contentItem )
 	{
 		Markdig.MarkdownPipeline pipeline = new Markdig.MarkdownPipelineBuilder()
 			//.UseAdvancedExtensions()
 			.UseYamlFrontMatter()
+			.UseEmphasisExtras()
+			.UseGridTables()
+			.UseMediaLinks()
 			.UsePipeTables()
 			.UseFootnotes()
-			.UseEmphasisExtras()
 			.UseListExtras()
-			.UseImageAsFigure()
+			//.UseImageAsFigure()
 			//.UseUrlRewriter( link =>
 			//{
 			//	return link.Url.OrThrow();
 			//} )
+			.UseImageAsFigure() //this is probably only needed for rendering to html
+			.UseGenericAttributes() // Must be last as it is one parser that is modifying other parsers
 			.Build();
-
 		MarkdigSyntax.MarkdownDocument document = Markdig.Parsers.MarkdownParser.Parse( markdownText, pipeline );
+		IEnumerable<MarkdigSyntax.Inlines.LinkInline> links = document.Descendants() //
+			.OfType<MarkdigSyntax.Inlines.LinkInline>();
+		foreach( MarkdigSyntax.Inlines.LinkInline link in links )
+		{
+			string? url = link.Url;
+			if( url == null )
+				continue;
+			if( url == "" || url.StartsWith2( "#" ) )
+				continue;
+			if( url.StartsWith2( "http://" ) || url.StartsWith2( "https://" ) )
+				continue;
+			if( url.EndsWith2( ".md" ) )
+			{
+				FileSystem.FileName fileName = FileSystem.FileName.AbsoluteOrRelative( url, contentItem.FileName.DirectoryName );
+				if( !contentItem.FileSystem.Exists( fileName ) )
+				{
+					(int lineNumber, int columnNumber, int length) = Helpers.GetSpanInformation( contentItem, link.UrlSpan.Start, link.UrlSpan.End );
+					issueDiagnostic( new BrokenLinkDiagnostic( contentItem, lineNumber, columnNumber, length, fileName ) );
+				}
+			}
+		}
 		return Markdig.Markdown.ToHtml( document, pipeline );
 	}
 

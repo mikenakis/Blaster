@@ -134,14 +134,12 @@ public abstract class FileSystem
 		public string ReadAllText() => DotNetHelpers.BomlessUtf8.GetString( ReadAllBytes() );
 		public void WriteAllText( string text ) => WriteAllBytes( DotNetHelpers.BomlessUtf8.GetBytes( text ) );
 		public abstract string GetDiagnosticPathName();
-
-		public void CopyFrom( Item sourceItem )
-		{
-			WriteAllBytes( sourceItem.ReadAllBytes() );
-		}
+		public void Delete() => FileSystem.Delete( FileName );
+		public void CopyFrom( Item sourceItem ) => WriteAllBytes( sourceItem.ReadAllBytes() );
 	}
 
-	public abstract Item CreateItem( FileName path );
+	public abstract Item CreateItem( FileName fileName );
+	public abstract void Delete( FileName fileName );
 
 	public Item CopyFrom( Item sourceItem )
 	{
@@ -152,16 +150,20 @@ public abstract class FileSystem
 
 	public abstract IEnumerable<Item> EnumerateItems();
 
-	public IEnumerable<Item> EnumerateSiblingItems( Item rootItem )
+	public IEnumerable<Item> EnumerateItems( DirectoryName directoryName )
 	{
-		DirectoryName baseDirectoryName = rootItem.FileName.DirectoryName;
 		foreach( Item item in EnumerateItems() )
 		{
-			DirectoryName directoryName = item.FileName.DirectoryName;
-			if( directoryName == baseDirectoryName )
+			if( item.FileName.DirectoryName == directoryName )
 				yield return item;
 		}
 	}
 
 	public abstract bool Exists( FileName fileName );
+
+	public void Clear()
+	{
+		foreach( Item? item in EnumerateItems() )
+			item.Delete();
+	}
 }
