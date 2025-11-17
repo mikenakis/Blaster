@@ -8,7 +8,6 @@ using MikeNakis.Kit.Extensions;
 using MikeNakis.Kit.FileSystem;
 using Testing;
 using static MikeNakis.Kit.GlobalStatics;
-using Html = HtmlAgilityPack;
 using SysCompiler = System.Runtime.CompilerServices;
 using VSTesting = Microsoft.VisualStudio.TestTools.UnitTesting;
 
@@ -26,12 +25,11 @@ public class T101_BlasterTests : TestClass
 <!DOCTYPE html>
 <html>
 """ );
-		FileSystem targetFileSystem = new FakeFileSystem( fakeClock );
+		FileSystem outputtFileSystem = new FakeFileSystem( fakeClock );
 		List<Diagnostic> diagnostics = new();
-		BlasterEngine.Run( sourceFileSystem, templateFileSystem, targetFileSystem, diagnosticConsumer );
+		BlasterEngine.Run( sourceFileSystem, templateFileSystem, outputtFileSystem, diagnosticConsumer );
 		Assert( diagnostics.Count == 1 );
 		Assert( diagnostics[0] is HtmlParseDiagnostic );
-		Assert( ((HtmlParseDiagnostic)diagnostics[0]).HtmlParseError.Code == Html.HtmlParseErrorCode.TagNotClosed );
 		return;
 
 		void diagnosticConsumer( Diagnostic diagnostic )
@@ -48,9 +46,10 @@ public class T101_BlasterTests : TestClass
 		FileSystem sourceFileSystem = new FakeFileSystem( fakeClock );
 		sourceFileSystem.CreateItem( FileSystem.FileName.Absolute( "/index.md" ) ).WriteAllText( "This is /index.md and this is a broken link [](nonexistent.md)" );
 		FileSystem templateFileSystem = new FakeFileSystem( fakeClock );
-		FileSystem targetFileSystem = new FakeFileSystem( fakeClock );
+		templateFileSystem.CreateItem( FileSystem.FileName.Absolute( "/template.html" ) ).WriteAllText( "<!DOCTYPE html><html><head></head><body>{{content}}</body></html>" );
+		FileSystem outputFileSystem = new FakeFileSystem( fakeClock );
 		List<Diagnostic> diagnostics = new();
-		BlasterEngine.Run( sourceFileSystem, templateFileSystem, targetFileSystem, diagnosticConsumer );
+		BlasterEngine.Run( sourceFileSystem, templateFileSystem, outputFileSystem, diagnosticConsumer );
 		Assert( diagnostics.Count == 1 );
 		Assert( diagnostics[0] is BrokenLinkDiagnostic );
 		Assert( ((BrokenLinkDiagnostic)diagnostics[0]).FileName.Content == "/nonexistent.md" );
@@ -81,8 +80,8 @@ public class T101_BlasterTests : TestClass
 	</body>
 </html>
 """ );
-		FileSystem targetFileSystem = new FakeFileSystem( fakeClock );
-		BlasterEngine.Run( sourceFileSystem, templateFileSystem, targetFileSystem, diagnosticConsumer );
+		FileSystem outputFileSystem = new FakeFileSystem( fakeClock );
+		BlasterEngine.Run( sourceFileSystem, templateFileSystem, outputFileSystem, diagnosticConsumer );
 		string expectedText = """
 <!DOCTYPE html>
 <html>
@@ -94,7 +93,7 @@ public class T101_BlasterTests : TestClass
 	</body>
 </html>
 """;
-		string actualText = targetFileSystem.EnumerateItems().Single().ReadAllText();
+		string actualText = outputFileSystem.EnumerateItems().Single().ReadAllText();
 		Assert( equals( actualText, expectedText ) );
 		return;
 
@@ -115,10 +114,9 @@ public class T101_BlasterTests : TestClass
 		DirectoryPath testFilesDirectoryPath = getTestDirectory().Directory( "test-files" );
 		FileSystem sourceFileSystem = new HybridFileSystem( /*fakeClock,*/ testFilesDirectoryPath.Directory( "content" ) );
 		FileSystem templateFileSystem = new HybridFileSystem( /*fakeClock,*/ testFilesDirectoryPath.Directory( "template" ) );
-		FileSystem targetFileSystem = new HybridFileSystem( /*fakeClock,*/ testFilesDirectoryPath.Directory( "output" ) );
-		targetFileSystem.Clear();
+		FileSystem outputFileSystem = new HybridFileSystem( /*fakeClock,*/ testFilesDirectoryPath.Directory( "output" ) );
 
-		BlasterEngine.Run( sourceFileSystem, templateFileSystem, targetFileSystem, diagnosticConsumer );
+		BlasterEngine.Run( sourceFileSystem, templateFileSystem, outputFileSystem, diagnosticConsumer );
 
 		static void diagnosticConsumer( Diagnostic diagnostic )
 		{

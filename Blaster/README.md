@@ -75,7 +75,10 @@ TODO:
 - Add embedding of small svg files
 - Research the "integrity" attribute of `<script>` and possibly implement it
 - Research the "srcset" attribute of `<img>` and possibly implement it
-- Implement local web server with livereload (otherwise we can't have livereload)
+
+IDEAS:
+
+- Introduce a `<content>` element in template html, to contain all child templates. When this element gets extracted from the template, it gets replaced with `{{content}}`, so that once the resolved child template has been applied, we know exactly where to paste the result. Also, the html inside this element and between the child templates gets completely stripped away, so the web designer can place some design-time-only html there to better organize the child templates.
 
 
 * * *

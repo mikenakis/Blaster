@@ -1,46 +1,42 @@
 namespace Blaster;
 
-using static MikeNakis.Kit.GlobalStatics;
-using Html = HtmlAgilityPack;
+using System.Collections.Immutable;
 using RegEx = System.Text.RegularExpressions;
 
 abstract class View
 {
-	public readonly View? Parent;
-	public readonly Html.HtmlNode HtmlNode;
 	public readonly Name Name;
-	readonly RegEx.Regex filter;
+	public readonly ImmutableArray<View> Children;
+	readonly RegEx.Regex appliesTo;
 
-	protected View( View? parent, Html.HtmlNode htmlNode, Name name, RegEx.Regex filter )
+	protected View( Name name, RegEx.Regex appliesTo, ImmutableArray<View> children )
 	{
-		Parent = parent;
-		HtmlNode = htmlNode;
 		Name = name;
-		this.filter = filter;
+		Children = children;
+		this.appliesTo = appliesTo;
 	}
 
 	public bool IsApplicableTo( ViewModel viewModel )
 	{
-		return filter.IsMatch( viewModel.TypeName );
+		return appliesTo.IsMatch( viewModel.TypeName );
 	}
 
-	public abstract string Apply( ViewModel viewModel );
+	public abstract string Apply( ContentBase viewModel );
 
-	public override string ToString() => $"{GetType().Name} \"{Name}\" filter=\"{filter}\"";
+	public override string ToString() => $"{GetType().Name} \"{Name}\"";
 }
 
 sealed class ContentView : View
 {
 	readonly TemplateEngine templateEngine;
 
-	public ContentView( View? parent, Html.HtmlNode htmlNode, Name name, RegEx.Regex filter )
-		: base( parent, htmlNode, name, filter )
+	public ContentView( Name name, RegEx.Regex appliesTo, ImmutableArray<View> children, string html )
+		: base( name, appliesTo, children )
 	{
-		Assert( htmlNode.Name is Constants.ContentViewTagName or "#document" );
-		templateEngine = TemplateEngine.Create( htmlNode.InnerHtml ); //NOTE: this is wrong. At this point, the inner html contains child views. We must wait until they have been extracted before building the template.
+		templateEngine = TemplateEngine.Create( html );
 	}
 
-	public override string Apply( ViewModel viewModel )
+	public override string Apply( ContentBase viewModel )
 	{
 		return templateEngine.GenerateText( name => name switch
 			{
@@ -53,16 +49,17 @@ sealed class ContentView : View
 
 sealed class CollectionView : View
 {
+	readonly TemplateEngine templateEngine;
 	public readonly Name ElementViewName;
 
-	public CollectionView( View? parent, Html.HtmlNode htmlNode, Name name, RegEx.Regex filter, Name elementViewName )
-		: base( parent, htmlNode, name, filter )
+	public CollectionView( Name name, RegEx.Regex appliesTo, ImmutableArray<View> children, string html, Name elementViewName )
+		: base( name, appliesTo, children )
 	{
-		Assert( htmlNode.Name == Constants.CollectionViewTagName );
 		ElementViewName = elementViewName;
+		templateEngine = TemplateEngine.Create( html );
 	}
 
-	public override string Apply( ViewModel viewModel )
+	public override string Apply( ContentBase viewModel )
 	{
 		CollectionViewModel collectionViewModel = (CollectionViewModel)viewModel;
 		return collectionViewModel.Item.FileName.Content; //XXX

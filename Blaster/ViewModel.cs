@@ -4,12 +4,32 @@ using System.Collections.Immutable;
 using System.Linq;
 using MikeNakis.Kit.Extensions;
 
-abstract class ViewModel
+abstract class ContentBase
+{
+	public abstract string Title { get; }
+	public abstract string Content { get; }
+}
+
+sealed class HtmlContent : ContentBase
+{
+	readonly ContentBase viewModel;
+	readonly string htmlText;
+	public override string Title => viewModel.Title;
+	public override string Content => htmlText;
+
+	public HtmlContent( ContentBase viewModel, string htmlText )
+	{
+		this.viewModel = viewModel;
+		this.htmlText = htmlText;
+	}
+}
+
+abstract class ViewModel : ContentBase
 {
 	public readonly FileSystem.Item Item;
 	public abstract string TypeName { get; }
-	public abstract string Title { get; }
-	public abstract string Content { get; }
+	public abstract override string Title { get; }
+	public abstract override string Content { get; }
 
 	protected ViewModel( FileSystem.Item item )
 	{

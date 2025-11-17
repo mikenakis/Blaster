@@ -117,6 +117,7 @@ public abstract class FileSystem
 
 		public FileName WithExtension( string extension ) => Absolute( Content + extension );
 		internal bool HasExtension( string extension ) => Content.EndsWith2( extension );
+		public FileName WithReplacedExtension( string extension ) => WithoutExtension.WithExtension( extension );
 	}
 
 	public abstract class Item

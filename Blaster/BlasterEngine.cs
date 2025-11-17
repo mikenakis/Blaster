@@ -34,8 +34,6 @@ public sealed class BlasterEngine
 	readonly FileSystem templateFileSystem;
 	readonly FileSystem outputFileSystem;
 	readonly Sys.Action<Diagnostic> diagnosticConsumer;
-	readonly List<View> views = new List<View>();
-	readonly View rootView = new ContentView( null, getRootViewHtmlNode(), Name.Of( "root" ), new RegEx.Regex( ".*" ) );
 
 	BlasterEngine( FileSystem contentFileSystem, FileSystem templateFileSystem, FileSystem outputFileSystem, Sys.Action<Diagnostic> diagnosticConsumer )
 	{
@@ -43,7 +41,6 @@ public sealed class BlasterEngine
 		this.templateFileSystem = templateFileSystem;
 		this.outputFileSystem = outputFileSystem;
 		this.diagnosticConsumer = diagnosticConsumer;
-		views.Add( rootView );
 	}
 
 	void issueDiagnostic( Diagnostic diagnostic )
@@ -53,37 +50,120 @@ public sealed class BlasterEngine
 
 	public void Run()
 	{
+		outputFileSystem.Clear();
+		List<View> topLevelViews = collectTopLevelViews();
+		generateHtmlFiles( topLevelViews );
+	}
+
+	List<View> collectTopLevelViews()
+	{
+		List<View> topLevelViews = new();
+
 		foreach( FileSystem.Item templateItem in templateFileSystem.EnumerateItems() )
 		{
 			if( templateItem.FileName.Extension == ".html" )
-				extractViews( rootView, templateItem );
+			{
+				View topLevelView = extractTopLevelView( templateItem );
+				topLevelViews.Add( topLevelView );
+			}
 			else
 				outputFileSystem.CopyFrom( templateItem );
 		}
 
-		Helpers.PrintTree( rootView, view => getChildViews( view, views ), view => view.ToString(), s => Log.Debug( s ) );
+		foreach( View topLevelView in topLevelViews )
+			Helpers.PrintTree( topLevelView, view => view.Children, view => $"{view}", s => Log.Debug( s ) );
 
+		return topLevelViews;
+	}
+
+	View extractTopLevelView( FileSystem.Item templateItem )
+	{
+		Name name = Name.Of( templateItem.FileName.Content );
+		Html.HtmlNode htmlNode = getHtmlNode( templateItem );
+		ImmutableArray<View> childViews = extractChildViews( name.Content, htmlNode, templateItem );
+		htmlNode.Remove();
+		return new ContentView( name, new RegEx.Regex( ".*" ), childViews, htmlNode.InnerHtml );
+	}
+
+	Html.HtmlNode getHtmlNode( FileSystem.Item templateItem )
+	{
+		string template = templateItem.ReadAllText();
+		Html.HtmlDocument templateDocument = new Html.HtmlDocument();
+		templateDocument.LoadHtml( template );
+		foreach( Html.HtmlParseError parseError in templateDocument.ParseErrors )
+			issueDiagnostic( new HtmlParseDiagnostic( templateItem, parseError.Line, parseError.LinePosition, 1, parseError.Reason ) );
+		return templateDocument.DocumentNode;
+	}
+
+	ImmutableArray<View> extractChildViews( string namePrefix, Html.HtmlNode parentHtmlNode, FileSystem.Item templateItem )
+	{
+		List<View> allChildViews = new();
+		foreach( Html.HtmlNode htmlNode in parentHtmlNode.ChildNodes.ToImmutableArray() )
+		{
+			if( htmlNode.Name == Constants.ContentViewTagName )
+			{
+				RegEx.Regex appliesTo = getAppliesTo( htmlNode );
+				Name name = Name.Of( $"{namePrefix} / {appliesTo}" );
+				ImmutableArray<View> childViews = extractChildViews( name.Content, htmlNode, templateItem );
+				htmlNode.Remove();
+				View childView = new ContentView( name, appliesTo, childViews, htmlNode.InnerHtml );
+				allChildViews.Add( childView );
+			}
+			else if( htmlNode.Name == Constants.CollectionViewTagName )
+			{
+				RegEx.Regex appliesTo = getAppliesTo( htmlNode );
+				Name name = Name.Of( $"{namePrefix} / {appliesTo}" );
+				ImmutableArray<View> childViews = extractChildViews( name.Content, htmlNode, templateItem );
+				Name elementViewName = getElementViewName( htmlNode, templateItem );
+				htmlNode.Remove();
+				View childView = new CollectionView( name, appliesTo, childViews, htmlNode.InnerHtml, elementViewName );
+				allChildViews.Add( childView );
+			}
+			else
+			{
+				ImmutableArray<View> childViews = extractChildViews( namePrefix, htmlNode, templateItem );
+				allChildViews.AddRange( childViews );
+			}
+		}
+		return allChildViews.ToImmutableArray();
+
+		static RegEx.Regex getAppliesTo( Html.HtmlNode htmlNode )
+		{
+			Html.HtmlAttribute? appliesToAttribute = htmlNode.Attributes.AttributesWithName( Constants.AppliesToAttributeName ).SingleOrDefault();
+			string pattern = appliesToAttribute?.Value ?? "*";
+			if( pattern.StartsWith2( "*." ) )
+				pattern = ".*\\." + pattern[2..];
+			else if( pattern.StartsWith2( "*" ) )
+				pattern = ".*" + pattern[1..];
+			return new RegEx.Regex( pattern );
+		}
+	}
+
+	void generateHtmlFiles( IReadOnlyList<View> topLevelViews )
+	{
 		foreach( FileSystem.Item contentItem in contentFileSystem.EnumerateItems() )
 		{
 			if( contentItem.FileName.Content.StartsWith2( "_" ) ) //TODO: get rid of
 				continue;
 			if( contentItem.FileName.Extension == ".md" )
-				htmlFromMarkdown( contentItem );
+				htmlFromMarkdown( topLevelViews, contentItem );
 			else
 				outputFileSystem.CopyFrom( contentItem );
 		}
 	}
 
-	void htmlFromMarkdown( FileSystem.Item contentItem )
+	void htmlFromMarkdown( IReadOnlyList<View> topLevelViews, FileSystem.Item contentItem )
 	{
 		ViewModel viewModel = getViewModel( contentItem );
-		View view = tryFindView( viewModel, rootView ).OrThrow(); //a view is guaranteed to be found because the root view matches everything
-		string htmlText = view.Apply( viewModel );
-		FileSystem.Item outputItem = outputFileSystem.CreateItem( contentItem.FileName.WithoutExtension.WithExtension( ".html" ) );
+		View view = findView( viewModel, topLevelViews );
+		string htmlText = applyViewToViewModel( viewModel, view, topLevelViews );
+		FileSystem.Item outputItem = outputFileSystem.CreateItem( contentItem.FileName.WithReplacedExtension( ".html" ) );
 		outputItem.WriteAllText( htmlText );
 	}
 
-	static Html.HtmlNode getRootViewHtmlNode()
+	static readonly View noView = getNoView();
+
+	static View getNoView()
 	{
 		string html = """
 <!DOCTYPE html>
@@ -98,85 +178,82 @@ public sealed class BlasterEngine
 """;
 		Html.HtmlDocument templateDocument = new Html.HtmlDocument();
 		templateDocument.LoadHtml( html );
-		return templateDocument.DocumentNode;
+		return new ContentView( Name.Of( "noView" ), new RegEx.Regex( ".*" ), ImmutableArray<View>.Empty, templateDocument.DocumentNode.InnerHtml );
 	}
 
-	void extractViews( View rootView, FileSystem.Item templateItem )
+	View findView( ViewModel viewModel, IReadOnlyList<View> topLevelViews )
 	{
-		Html.HtmlNode htmlNode = getHtmlNode( templateItem );
-		View newRootView = new ContentView( rootView, htmlNode, Name.Of( templateItem.FileName.Content ), new RegEx.Regex( ".*" ) );
-		views.Add( newRootView );
-		recurse( newRootView, htmlNode, templateItem );
-		foreach( View view in views )
-			view.HtmlNode.Remove(); //FIXME this is wrong: the nodes should have been removed earlier.
-		return;
-
-		Html.HtmlNode getHtmlNode( FileSystem.Item templateItem )
+		List<View> views = new();
+		foreach( View topLevelView in topLevelViews )
+			findViews( viewModel, topLevelView, views );
+		if( views.Count == 0 )
 		{
-			string template = templateItem.ReadAllText();
-			Html.HtmlDocument templateDocument = new Html.HtmlDocument();
-			templateDocument.LoadHtml( template );
-			foreach( Html.HtmlParseError parseError in templateDocument.ParseErrors )
-				issueDiagnostic( new HtmlParseDiagnostic( templateItem, parseError ) );
-			return templateDocument.DocumentNode;
+			issueDiagnostic( new CustomDiagnostic( Severity.Warn, viewModel.Item, 1, 1, 1, $"No view found for {viewModel}" ) );
+			return noView;
 		}
+		if( views.Count > 1 )
+			issueDiagnostic( new CustomDiagnostic( Severity.Warn, viewModel.Item, 1, 1, 1, $"Multiple views found for {viewModel}: {views.Select( view => $"\"{view.Name}\"" ).MakeString( ", " )}" ) );
+		return views[0];
+	}
 
-		void recurse( View parentView, Html.HtmlNode parentNode, FileSystem.Item templateItem )
+	static void findViews( ViewModel viewModel, View parentView, List<View> views )
+	{
+		if( parentView.IsApplicableTo( viewModel ) )
 		{
-			foreach( Html.HtmlNode childNode in parentNode.ChildNodes.ToImmutableArray() )
-			{
-				View? childView = createChildView( parentView, childNode, templateItem );
-				if( childView != null )
-					views.Add( childView );
-				recurse( childView ?? parentView, childNode, templateItem );
-			}
-
-			View? createChildView( View parentView, Html.HtmlNode htmlNode, FileSystem.Item templateItem )
-			{
-				if( htmlNode.Name == Constants.ContentViewTagName )
-				{
-					Name name = getName( htmlNode );
-					RegEx.Regex appliesTo = getAppliesTo( htmlNode );
-					return new ContentView( parentView, htmlNode, name, appliesTo );
-				}
-				if( htmlNode.Name == Constants.CollectionViewTagName )
-				{
-					Name name = getName( htmlNode );
-					RegEx.Regex appliesTo = getAppliesTo( htmlNode );
-					Name elementViewName = getElementViewName( htmlNode, templateItem );
-					return new CollectionView( parentView, htmlNode, name, appliesTo, elementViewName );
-				}
-				return null;
-
-				static Name getName( Html.HtmlNode htmlNode )
-				{
-					Html.HtmlAttribute? nameAttribute = htmlNode.Attributes.AttributesWithName( Constants.NameAttributeName ).SingleOrDefault();
-					return Name.Of( nameAttribute?.Value ?? htmlNode.XPath );
-				}
-
-				static RegEx.Regex getAppliesTo( Html.HtmlNode htmlNode )
-				{
-					Html.HtmlAttribute? appliesToAttribute = htmlNode.Attributes.AttributesWithName( Constants.AppliesToAttributeName ).SingleOrDefault();
-					string pattern = appliesToAttribute?.Value ?? "*";
-					if( pattern.StartsWith2( "*." ) )
-						pattern = ".*\\." + pattern[2..];
-					else if( pattern.StartsWith2( "*" ) )
-						pattern = ".*" + pattern[1..];
-					return new RegEx.Regex( pattern );
-				}
-
-				Name getElementViewName( Html.HtmlNode htmlNode, FileSystem.Item templateItem )
-				{
-					Html.HtmlAttribute? elementViewAttribute = htmlNode.Attributes.AttributesWithName( Constants.ElementViewAttributeName ).SingleOrDefault();
-					if( elementViewAttribute == null )
-					{
-						issueDiagnostic( new CustomDiagnostic( Severity.Error, templateItem, htmlNode.Line, htmlNode.LinePosition, 1, $"Collection view is missing a '{Constants.ElementViewAttributeName}' attribute" ) );
-						return Name.Of( "" );
-					}
-					return Name.Of( elementViewAttribute.Value );
-				}
-			}
+			int n = views.Count;
+			foreach( View childView in parentView.Children )
+				findViews( viewModel, childView, views );
+			if( views.Count == n )
+				views.Add( parentView );
 		}
+	}
+
+	string applyViewToViewModel( ContentBase viewModel, View view, IReadOnlyList<View> topLevelViews )
+	{
+		while( true )
+		{
+			string htmlText = view.Apply( viewModel );
+			View? parentView = getParentView( view, topLevelViews );
+			if( parentView == null )
+				return htmlText;
+			view = parentView;
+			viewModel = new HtmlContent( viewModel, htmlText );
+		}
+	}
+
+	static View? getParentView( View view, IReadOnlyList<View> topLevelViews )
+	{
+		foreach( View topLevelView in topLevelViews )
+		{
+			View? found = getParentView( view, topLevelView );
+			if( found != null )
+				return found;
+		}
+		return null;
+
+		static View? getParentView( View view, View parentView )
+		{
+			foreach( View childView in parentView.Children )
+			{
+				if( childView == view )
+					return parentView;
+				View? found = getParentView( view, childView );
+				if( found != null )
+					return found;
+			}
+			return null;
+		}
+	}
+
+	Name getElementViewName( Html.HtmlNode htmlNode, FileSystem.Item templateItem )
+	{
+		Html.HtmlAttribute? elementViewAttribute = htmlNode.Attributes.AttributesWithName( Constants.ElementViewAttributeName ).SingleOrDefault();
+		if( elementViewAttribute == null )
+		{
+			issueDiagnostic( new CustomDiagnostic( Severity.Error, templateItem, htmlNode.Line, htmlNode.LinePosition, 1, $"Collection view is missing a '{Constants.ElementViewAttributeName}' attribute" ) );
+			return Name.Of( "" );
+		}
+		return Name.Of( elementViewAttribute.Value );
 	}
 
 	ViewModel getViewModel( FileSystem.Item contentItem )
@@ -198,30 +275,6 @@ public sealed class BlasterEngine
 		return new ContentViewModel( contentItem, htmlText );
 	}
 
-	View? tryFindView( ViewModel viewModel, View parentView )
-	{
-		IEnumerable<View> visibleViews = getChildViews( parentView, views ).Collect();
-		IReadOnlyList<View> applicableViews = visibleViews.Where( a => a.IsApplicableTo( viewModel ) ).Collect();
-		if( applicableViews.Count > 0 )
-		{
-			if( applicableViews.Count > 1 )
-			{
-				Log.Warn( $"More than one view is applicable to {viewModel}" );
-				string underMessage = parentView == null ? "" : $" under {parentView.Name.Content}";
-				issueDiagnostic( new CustomDiagnostic( Severity.Warn, viewModel.Item, 1, 1, 1, $"More than one view{underMessage} is applicable to {viewModel}" ) );
-			}
-			return applicableViews[0];
-		}
-		if( parentView.IsApplicableTo( viewModel ) )
-			return parentView;
-		return null;
-	}
-
-	IEnumerable<View> getChildViews( View parentView, IReadOnlyList<View> views )
-	{
-		return views.Where( view => view.Parent == parentView );
-	}
-
 	static string fixLinks( string htmlText, FileSystem.Item contentItem )
 	{
 		FileSystem.DirectoryName directoryName = contentItem.FileName.DirectoryName;
@@ -240,7 +293,7 @@ public sealed class BlasterEngine
 			if( href.EndsWith2( ".md" ) )
 			{
 				FileSystem.FileName fileName = FileSystem.FileName.AbsoluteOrRelative( hrefAttribute.Value, directoryName );
-				hrefAttribute.Value = fileName.WithoutExtension.WithExtension( ".html" ).Content;
+				hrefAttribute.Value = fileName.WithReplacedExtension( ".html" ).Content;
 			}
 		}
 		return htmlDocument.DocumentNode.OuterHtml;

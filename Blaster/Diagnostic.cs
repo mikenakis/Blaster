@@ -1,6 +1,5 @@
 namespace Blaster;
 
-using Html = HtmlAgilityPack;
 using SysText = System.Text;
 
 public enum Severity
@@ -51,13 +50,13 @@ public abstract class Diagnostic
 
 public sealed class HtmlParseDiagnostic : Diagnostic
 {
-	public Html.HtmlParseError HtmlParseError { get; }
-	public override string Message => HtmlParseError.Reason;
+	readonly string message;
+	public override string Message => message;
 
-	public HtmlParseDiagnostic( FileSystem.Item sourceItem, Html.HtmlParseError htmlParseError )
-		: base( Severity.Error, sourceItem, htmlParseError.Line, htmlParseError.LinePosition, 1 )
+	public HtmlParseDiagnostic( FileSystem.Item sourceItem, int lineNumber, int columnNumber, int length, string message )
+		: base( Severity.Error, sourceItem, lineNumber, columnNumber, length )
 	{
-		HtmlParseError = htmlParseError;
+		this.message = message;
 	}
 }
 
