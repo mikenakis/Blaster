@@ -10,47 +10,46 @@ using Sys = System;
 
 public sealed class HybridFileSystem : FileSystem
 {
-	abstract class MyItem : Item
+	abstract class MyFileItem : FileItem
 	{
 		public readonly new HybridFileSystem FileSystem;
-		readonly FileName path;
-		public override FileName FileName => path;
+		readonly FileName fileName;
+		public override FileName FileName => fileName;
 
-		protected MyItem( HybridFileSystem fileSystem, FileName fileName )
+		protected MyFileItem( HybridFileSystem fileSystem, FileName fileName )
 			: base( fileSystem )
 		{
 			FileSystem = fileSystem;
-			this.path = fileName;
+			this.fileName = fileName;
 		}
-
-		public override string ToString() => $"{GetType().Name} \"{FileName}\"";
 	}
 
-	sealed class FileItem : MyItem
+	sealed class MyActualFileItem : MyFileItem
 	{
 		readonly Sys.DateTime dateTime;
-		public readonly byte[] Content;
+		readonly byte[] content;
 		FilePath filePath => FileSystem.getFilePath( FileName );
 
-		public FileItem( HybridFileSystem fileSystem, FileName fileName, Sys.DateTime dateTime, byte[] content )
+		public MyActualFileItem( HybridFileSystem fileSystem, FileName fileName, Sys.DateTime dateTime, byte[] content )
 			: base( fileSystem, fileName )
 		{
 			this.dateTime = dateTime;
-			Content = content;
+			this.content = content;
 		}
 
 		public Sys.DateTime GetTimeModified() => dateTime;
 		public override byte[] ReadAllBytes() => filePath.ReadAllBytes();
 		public override void WriteAllBytes( byte[] bytes ) => filePath.WriteAllBytes( bytes );
 		public override string GetDiagnosticPathName() => filePath.Path;
+		public override long FileLength => content.Length;
 	}
 
-	sealed class FakeItem : MyItem
+	sealed class MyFakeFileItem : MyFileItem
 	{
 		readonly Sys.DateTime dateTime;
 		byte[] content;
 
-		public FakeItem( HybridFileSystem fileSystem, FileName fileName, Sys.DateTime dateTime, byte[] content )
+		public MyFakeFileItem( HybridFileSystem fileSystem, FileName fileName, Sys.DateTime dateTime, byte[] content )
 			: base( fileSystem, fileName )
 		{
 			this.dateTime = dateTime;
@@ -76,10 +75,11 @@ public sealed class HybridFileSystem : FileSystem
 		}
 
 		public override string GetDiagnosticPathName() => FileName.Content;
+		public override long FileLength => content.Length;
 	}
 
 	public DirectoryPath Root { get; }
-	readonly Dictionary<FileName, MyItem> items = new();
+	readonly Dictionary<FileName, MyFileItem> items = new();
 
 	public HybridFileSystem( DirectoryPath root )
 	{
@@ -97,19 +97,19 @@ public sealed class HybridFileSystem : FileSystem
 		void createItem( FileName fileName )
 		{
 			FilePath filePath = getFilePath( fileName );
-			FileItem item = new FileItem( this, fileName, filePath.CreationTimeUtc, filePath.ReadAllBytes() );
+			MyActualFileItem item = new MyActualFileItem( this, fileName, filePath.CreationTimeUtc, filePath.ReadAllBytes() );
 			items.Add( fileName, item );
 		}
 	}
 
-	public Item AddFakeItem( FileName fileName, Sys.DateTime dateTime, string content )
+	public FileItem AddFakeItem( FileName fileName, Sys.DateTime dateTime, string content )
 	{
-		FakeItem item = new FakeItem( this, fileName, dateTime, DotNetHelpers.BomlessUtf8.GetBytes( content ) );
+		MyFakeFileItem item = new MyFakeFileItem( this, fileName, dateTime, DotNetHelpers.BomlessUtf8.GetBytes( content ) );
 		items.Add( fileName, item );
 		return item;
 	}
 
-	public override IEnumerable<Item> EnumerateItems() => items.Values;
+	public override IEnumerable<FileItem> EnumerateItems() => items.Values;
 
 	static string normalize( string s )
 	{
@@ -123,12 +123,12 @@ public sealed class HybridFileSystem : FileSystem
 		return Root.RelativeFile( pathName[1..] );
 	}
 
-	public override Item CreateItem( FileName fileName )
+	public override FileItem CreateItem( FileName fileName )
 	{
 		FilePath filePath = getFilePath( fileName );
 		using( filePath.CreateBinary() )
 		{
-			FileItem item = new FileItem( this, fileName, filePath.CreationTimeUtc, Sys.Array.Empty<byte>() );
+			MyActualFileItem item = new MyActualFileItem( this, fileName, filePath.CreationTimeUtc, Sys.Array.Empty<byte>() );
 			items.Add( fileName, item );
 			return item;
 		}
@@ -136,9 +136,9 @@ public sealed class HybridFileSystem : FileSystem
 
 	public override void Delete( FileName fileName )
 	{
-		Item item = items[fileName];
+		FileItem item = items[fileName];
 		items.Remove( fileName );
-		if( item is FileItem )
+		if( item is MyActualFileItem )
 		{
 			FilePath filePath = getFilePath( fileName );
 			filePath.Delete();

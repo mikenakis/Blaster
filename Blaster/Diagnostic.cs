@@ -12,13 +12,13 @@ public enum Severity
 public abstract class Diagnostic
 {
 	public Severity Severity { get; }
-	public FileSystem.Item SourceItem { get; }
+	public FileItem SourceItem { get; }
 	public int LineNumber { get; }
 	public int ColumnNumber { get; }
 	public int Length { get; }
 	public abstract string Message { get; }
 
-	protected Diagnostic( Severity severity, FileSystem.Item sourceItem, int lineNumber, int columnNumber, int length )
+	protected Diagnostic( Severity severity, FileItem sourceItem, int lineNumber, int columnNumber, int length )
 	{
 		Severity = severity;
 		SourceItem = sourceItem;
@@ -53,7 +53,7 @@ public sealed class HtmlParseDiagnostic : Diagnostic
 	readonly string message;
 	public override string Message => message;
 
-	public HtmlParseDiagnostic( FileSystem.Item sourceItem, int lineNumber, int columnNumber, int length, string message )
+	public HtmlParseDiagnostic( FileItem sourceItem, int lineNumber, int columnNumber, int length, string message )
 		: base( Severity.Error, sourceItem, lineNumber, columnNumber, length )
 	{
 		this.message = message;
@@ -62,10 +62,10 @@ public sealed class HtmlParseDiagnostic : Diagnostic
 
 public sealed class BrokenLinkDiagnostic : Diagnostic
 {
-	public FileSystem.FileName FileName { get; }
+	public FileName FileName { get; }
 	public override string Message => $"Broken link: {FileName}";
 
-	public BrokenLinkDiagnostic( FileSystem.Item sourceItem, int lineNumber, int columnNumber, int length, FileSystem.FileName fileName )
+	public BrokenLinkDiagnostic( FileItem sourceItem, int lineNumber, int columnNumber, int length, FileName fileName )
 		: base( Severity.Error, sourceItem, lineNumber, columnNumber, length )
 	{
 		FileName = fileName;
@@ -76,7 +76,7 @@ public sealed class CustomDiagnostic : Diagnostic
 {
 	public override string Message { get; }
 
-	public CustomDiagnostic( Severity severity, FileSystem.Item sourceItem, int lineNumber, int columnNumber, int length, string message )
+	public CustomDiagnostic( Severity severity, FileItem sourceItem, int lineNumber, int columnNumber, int length, string message )
 		: base( severity, sourceItem, lineNumber, length, columnNumber )
 	{
 		Message = message;

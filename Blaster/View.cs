@@ -1,6 +1,7 @@
 namespace Blaster;
 
 using System.Collections.Immutable;
+using static MikeNakis.Kit.GlobalStatics;
 using RegEx = System.Text.RegularExpressions;
 
 abstract class View
@@ -57,6 +58,7 @@ sealed class CollectionView : View
 	{
 		ElementViewName = elementViewName;
 		templateEngine = TemplateEngine.Create( html );
+		Identity( templateEngine ); //TODO
 	}
 
 	public override string Apply( ContentBase viewModel )

@@ -10,7 +10,7 @@ using SysText = System.Text;
 
 static class Helpers
 {
-	public static string GetLine( FileSystem.Item item, int lineNumber )
+	public static string GetLine( FileItem item, int lineNumber )
 	{
 		if( lineNumber == 0 )
 			return "";
@@ -18,7 +18,7 @@ static class Helpers
 		return text.Split( '\n' ).Skip( lineNumber - 1 ).First();
 	}
 
-	internal static (int lineNumber, int columnNumber, int length) GetSpanInformation( FileSystem.Item item, int start, int end )
+	internal static (int lineNumber, int columnNumber, int length) GetSpanInformation( FileItem item, int start, int end )
 	{
 		string text = item.ReadAllText();
 		ImmutableArray<string> lines = text.Split( '\n' ).ToImmutableArray();

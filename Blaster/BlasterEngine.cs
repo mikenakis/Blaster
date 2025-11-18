@@ -59,7 +59,7 @@ public sealed class BlasterEngine
 	{
 		List<View> topLevelViews = new();
 
-		foreach( FileSystem.Item templateItem in templateFileSystem.EnumerateItems() )
+		foreach( FileItem templateItem in templateFileSystem.EnumerateItems() )
 		{
 			if( templateItem.FileName.Extension == ".html" )
 			{
@@ -76,7 +76,7 @@ public sealed class BlasterEngine
 		return topLevelViews;
 	}
 
-	View extractTopLevelView( FileSystem.Item templateItem )
+	View extractTopLevelView( FileItem templateItem )
 	{
 		Name name = Name.Of( templateItem.FileName.Content );
 		Html.HtmlNode htmlNode = getHtmlNode( templateItem );
@@ -85,7 +85,7 @@ public sealed class BlasterEngine
 		return new ContentView( name, new RegEx.Regex( ".*" ), childViews, htmlNode.InnerHtml );
 	}
 
-	Html.HtmlNode getHtmlNode( FileSystem.Item templateItem )
+	Html.HtmlNode getHtmlNode( FileItem templateItem )
 	{
 		string template = templateItem.ReadAllText();
 		Html.HtmlDocument templateDocument = new Html.HtmlDocument();
@@ -95,7 +95,7 @@ public sealed class BlasterEngine
 		return templateDocument.DocumentNode;
 	}
 
-	ImmutableArray<View> extractChildViews( string namePrefix, Html.HtmlNode parentHtmlNode, FileSystem.Item templateItem )
+	ImmutableArray<View> extractChildViews( string namePrefix, Html.HtmlNode parentHtmlNode, FileItem templateItem )
 	{
 		List<View> allChildViews = new();
 		foreach( Html.HtmlNode htmlNode in parentHtmlNode.ChildNodes.ToImmutableArray() )
@@ -141,7 +141,7 @@ public sealed class BlasterEngine
 
 	void generateHtmlFiles( IReadOnlyList<View> topLevelViews )
 	{
-		foreach( FileSystem.Item contentItem in contentFileSystem.EnumerateItems() )
+		foreach( FileItem contentItem in contentFileSystem.EnumerateItems() )
 		{
 			if( contentItem.FileName.Content.StartsWith2( "_" ) ) //TODO: get rid of
 				continue;
@@ -152,12 +152,12 @@ public sealed class BlasterEngine
 		}
 	}
 
-	void htmlFromMarkdown( IReadOnlyList<View> topLevelViews, FileSystem.Item contentItem )
+	void htmlFromMarkdown( IReadOnlyList<View> topLevelViews, FileItem contentItem )
 	{
 		ViewModel viewModel = getViewModel( contentItem );
 		View view = findView( viewModel, topLevelViews );
 		string htmlText = applyViewToViewModel( viewModel, view, topLevelViews );
-		FileSystem.Item outputItem = outputFileSystem.CreateItem( contentItem.FileName.WithReplacedExtension( ".html" ) );
+		FileItem outputItem = outputFileSystem.CreateItem( contentItem.FileName.WithReplacedExtension( ".html" ) );
 		outputItem.WriteAllText( htmlText );
 	}
 
@@ -245,7 +245,7 @@ public sealed class BlasterEngine
 		}
 	}
 
-	Name getElementViewName( Html.HtmlNode htmlNode, FileSystem.Item templateItem )
+	Name getElementViewName( Html.HtmlNode htmlNode, FileItem templateItem )
 	{
 		Html.HtmlAttribute? elementViewAttribute = htmlNode.Attributes.AttributesWithName( Constants.ElementViewAttributeName ).SingleOrDefault();
 		if( elementViewAttribute == null )
@@ -256,14 +256,14 @@ public sealed class BlasterEngine
 		return Name.Of( elementViewAttribute.Value );
 	}
 
-	ViewModel getViewModel( FileSystem.Item contentItem )
+	ViewModel getViewModel( FileItem contentItem )
 	{
 		string markdownText = contentItem.ReadAllText();
 
 		if( markdownText.IsWhitespace() )
 		{
 			SysText.StringBuilder stringBuilder = new();
-			ImmutableArray<FileSystem.Item> siblingItems = contentItem.FileSystem //
+			ImmutableArray<FileItem> siblingItems = contentItem.FileSystem //
 				.EnumerateItems( contentItem.FileName.DirectoryName ) //
 				.Where( siblingItem => siblingItem.FileName.HasExtension( ".md" ) ) //
 				.ToImmutableArray();
@@ -271,13 +271,12 @@ public sealed class BlasterEngine
 		}
 
 		string htmlText = convert( markdownText, contentItem );
-		htmlText = fixLinks( htmlText, contentItem );
+		htmlText = fixLinks( htmlText );
 		return new ContentViewModel( contentItem, htmlText );
 	}
 
-	static string fixLinks( string htmlText, FileSystem.Item contentItem )
+	static string fixLinks( string htmlText )
 	{
-		FileSystem.DirectoryName directoryName = contentItem.FileName.DirectoryName;
 		if( htmlText == "" )
 			return htmlText;
 		Html.HtmlDocument htmlDocument = new();
@@ -291,15 +290,12 @@ public sealed class BlasterEngine
 			if( href.StartsWith2( "http://" ) || href.StartsWith2( "https://" ) )
 				continue;
 			if( href.EndsWith2( ".md" ) )
-			{
-				FileSystem.FileName fileName = FileSystem.FileName.AbsoluteOrRelative( hrefAttribute.Value, directoryName );
-				hrefAttribute.Value = fileName.WithReplacedExtension( ".html" ).Content;
-			}
+				hrefAttribute.Value = href[..^3] + ".html";
 		}
 		return htmlDocument.DocumentNode.OuterHtml;
 	}
 
-	string convert( string markdownText, FileSystem.Item contentItem )
+	string convert( string markdownText, FileItem contentItem )
 	{
 		Markdig.MarkdownPipeline pipeline = new Markdig.MarkdownPipelineBuilder()
 			//.UseAdvancedExtensions()
@@ -332,7 +328,7 @@ public sealed class BlasterEngine
 				continue;
 			if( url.EndsWith2( ".md" ) )
 			{
-				FileSystem.FileName fileName = FileSystem.FileName.AbsoluteOrRelative( url, contentItem.FileName.DirectoryName );
+				FileName fileName = FileName.AbsoluteOrRelative( url, contentItem.FileName.DirectoryName );
 				if( !contentItem.FileSystem.Exists( fileName ) )
 				{
 					(int lineNumber, int columnNumber, int length) = Helpers.GetSpanInformation( contentItem, link.UrlSpan.Start, link.UrlSpan.End );

@@ -21,7 +21,7 @@ public class T101_BlasterTests : TestClass
 	{
 		FileSystem sourceFileSystem = new FakeFileSystem( fakeClock );
 		FileSystem templateFileSystem = new FakeFileSystem( fakeClock );
-		templateFileSystem.CreateItem( FileSystem.FileName.Absolute( "/template.html" ) ).WriteAllText( """
+		templateFileSystem.CreateItem( FileName.Absolute( "/template.html" ) ).WriteAllText( """
 <!DOCTYPE html>
 <html>
 """ );
@@ -44,9 +44,9 @@ public class T101_BlasterTests : TestClass
 	public void T102_Broken_Link_Is_Caught()
 	{
 		FileSystem sourceFileSystem = new FakeFileSystem( fakeClock );
-		sourceFileSystem.CreateItem( FileSystem.FileName.Absolute( "/index.md" ) ).WriteAllText( "This is /index.md and this is a broken link [](nonexistent.md)" );
+		sourceFileSystem.CreateItem( FileName.Absolute( "/index.md" ) ).WriteAllText( "This is /index.md and this is a broken link [](/nonexistent.md)" );
 		FileSystem templateFileSystem = new FakeFileSystem( fakeClock );
-		templateFileSystem.CreateItem( FileSystem.FileName.Absolute( "/template.html" ) ).WriteAllText( "<!DOCTYPE html><html><head></head><body>{{content}}</body></html>" );
+		templateFileSystem.CreateItem( FileName.Absolute( "/template.html" ) ).WriteAllText( "<!DOCTYPE html><html><head></head><body>{{content}}</body></html>" );
 		FileSystem outputFileSystem = new FakeFileSystem( fakeClock );
 		List<Diagnostic> diagnostics = new();
 		BlasterEngine.Run( sourceFileSystem, templateFileSystem, outputFileSystem, diagnosticConsumer );
@@ -67,9 +67,9 @@ public class T101_BlasterTests : TestClass
 	public void T102_Root_Template_Works()
 	{
 		FileSystem sourceFileSystem = new FakeFileSystem( fakeClock );
-		sourceFileSystem.CreateItem( FileSystem.FileName.Absolute( "/index.md" ) ).WriteAllText( "This is /index.md" );
+		sourceFileSystem.CreateItem( FileName.Absolute( "/index.md" ) ).WriteAllText( "This is /index.md" );
 		FileSystem templateFileSystem = new FakeFileSystem( fakeClock );
-		templateFileSystem.CreateItem( FileSystem.FileName.Absolute( "/template.html" ) ).WriteAllText( """
+		templateFileSystem.CreateItem( FileName.Absolute( "/template.html" ) ).WriteAllText( """
 <!DOCTYPE html>
 <html>
 	<head>

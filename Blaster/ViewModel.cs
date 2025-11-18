@@ -26,12 +26,12 @@ sealed class HtmlContent : ContentBase
 
 abstract class ViewModel : ContentBase
 {
-	public readonly FileSystem.Item Item;
+	public readonly FileItem Item;
 	public abstract string TypeName { get; }
 	public abstract override string Title { get; }
 	public abstract override string Content { get; }
 
-	protected ViewModel( FileSystem.Item item )
+	protected ViewModel( FileItem item )
 	{
 		Item = item;
 	}
@@ -46,7 +46,7 @@ sealed class ContentViewModel : ViewModel
 	public override string Content => HtmlText;
 	public readonly string HtmlText;
 
-	public ContentViewModel( FileSystem.Item item, string htmlText )
+	public ContentViewModel( FileItem item, string htmlText )
 		: base( item )
 	{
 		HtmlText = htmlText;
@@ -58,9 +58,9 @@ sealed class CollectionViewModel : ViewModel
 	public override string TypeName => $"{Item.FileName.Content}[]";
 	public override string Title => TypeName;
 	public override string Content => Paths.Select( path => path.FileName.Content ).MakeString( ", " );
-	public readonly ImmutableArray<FileSystem.Item> Paths;
+	public readonly ImmutableArray<FileItem> Paths;
 
-	public CollectionViewModel( FileSystem.Item item, ImmutableArray<FileSystem.Item> paths )
+	public CollectionViewModel( FileItem item, ImmutableArray<FileItem> paths )
 		: base( item )
 	{
 		Paths = paths;

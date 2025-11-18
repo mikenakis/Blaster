@@ -8,7 +8,7 @@ using Sys = System;
 
 sealed class FakeFileSystem : FileSystem
 {
-	sealed class FakeItem : Item
+	sealed class MyFileItem : FileItem
 	{
 		readonly FakeFileSystem fileSystem;
 		readonly FileName fileName;
@@ -16,7 +16,7 @@ sealed class FakeFileSystem : FileSystem
 		byte[] content = Sys.Array.Empty<byte>();
 		public override FileName FileName => fileName;
 
-		public FakeItem( FakeFileSystem fileSystem, FileName fileName, Sys.DateTime dateTime )
+		public MyFileItem( FakeFileSystem fileSystem, FileName fileName, Sys.DateTime dateTime )
 			: base( fileSystem )
 		{
 			this.fileSystem = fileSystem;
@@ -48,12 +48,12 @@ sealed class FakeFileSystem : FileSystem
 			return fileSystem.getFilePathName( FileName );
 		}
 
-		public override string ToString() => $"{GetType().Name} {fileName}";
+		public override long FileLength => content.Length;
 	}
 
 	readonly Clock clock;
 	readonly MikeNakis.Kit.FileSystem.DirectoryPath? persistenceDirectoryPath;
-	readonly Dictionary<FileName, FakeItem> items = new();
+	readonly Dictionary<FileName, MyFileItem> items = new();
 
 	public FakeFileSystem( Clock clock, MikeNakis.Kit.FileSystem.DirectoryPath? persistenceDirectoryPath = null )
 	{
@@ -61,15 +61,15 @@ sealed class FakeFileSystem : FileSystem
 		this.persistenceDirectoryPath = persistenceDirectoryPath;
 	}
 
-	public Item AddItem( FileName fileName, Sys.DateTime dateTime, string content )
+	public FileItem AddItem( FileName fileName, Sys.DateTime dateTime, string content )
 	{
-		FakeItem item = new FakeItem( this, fileName, dateTime );
+		MyFileItem item = new MyFileItem( this, fileName, dateTime );
 		items.Add( fileName, item );
 		item.WriteAllBytes( DotNetHelpers.BomlessUtf8.GetBytes( content ) );
 		return item;
 	}
 
-	public override IEnumerable<Item> EnumerateItems() => items.Values;
+	public override IEnumerable<FileItem> EnumerateItems() => items.Values;
 
 	void possiblyPersist( FileName fileName, byte[] bytes )
 	{
@@ -88,9 +88,9 @@ sealed class FakeFileSystem : FileSystem
 		return persistenceDirectoryPath.RelativeFile( fileName.Content ).Path;
 	}
 
-	public override Item CreateItem( FileName fileName )
+	public override FileItem CreateItem( FileName fileName )
 	{
-		FakeItem item = new FakeItem( this, fileName, clock.GetUniversalTime() );
+		MyFileItem item = new MyFileItem( this, fileName, clock.GetUniversalTime() );
 		items.Add( fileName, item );
 		return item;
 	}
