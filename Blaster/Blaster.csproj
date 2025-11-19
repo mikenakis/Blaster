@@ -20,7 +20,8 @@
 		<PackageReference Include="Markdig" Version="0.43.0" />	
 		<PackageReference Include="MarkdigExtensions.UrlRewriter" Version="1.0.0" />
 		<PackageReference Include="MarkdigExtensions.ImageAsFigure" Version="1.0.0" />		
-		<PackageReference Include="MikeNakis.Clio-$(PackagesConfiguration)" Version="5.0.36" />		
+		<PackageReference Include="MikeNakis.Clio-$(PackagesConfiguration)" Version="5.0.36" />
+		<PackageReference Include="SharpYaml" Version="2.1.4" />
 	</ItemGroup>
 
 </Project>

@@ -1,5 +1,6 @@
 namespace Blaster;
 
+using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using MikeNakis.Kit.Extensions;
@@ -42,13 +43,15 @@ abstract class ViewModel : ContentBase
 sealed class ContentViewModel : ViewModel
 {
 	public override string TypeName => Item.FileName.Content;
-	public override string Title => TypeName; //TODO: get from frontmatter
+	public override string Title => Properties.TryGet2( "Title" ) ?? Item.FileName.Content;
 	public override string Content => HtmlText;
+	public readonly IReadOnlyDictionary<string, string> Properties;
 	public readonly string HtmlText;
 
-	public ContentViewModel( FileItem item, string htmlText )
+	public ContentViewModel( FileItem item, IReadOnlyDictionary<string, string> properties, string htmlText )
 		: base( item )
 	{
+		Properties = properties;
 		HtmlText = htmlText;
 	}
 }

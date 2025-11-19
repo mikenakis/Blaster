@@ -9,11 +9,14 @@ using MikeNakis.Kit.Collections;
 using MikeNakis.Kit.Extensions;
 using static Markdig.MarkdownExtensions;
 using static Markdig.Syntax.MarkdownObjectExtensions;
+using static MikeNakis.Kit.GlobalStatics;
 using Html = HtmlAgilityPack;
 using Markdig = Markdig;
 using MarkdigSyntax = Markdig.Syntax;
+using MarkdigYaml = Markdig.Extensions.Yaml;
 using RegEx = System.Text.RegularExpressions;
 using Sys = System;
+using SysIo = System.IO;
 using SysText = System.Text;
 
 public sealed class BlasterEngine
@@ -37,6 +40,7 @@ public sealed class BlasterEngine
 
 	BlasterEngine( FileSystem contentFileSystem, FileSystem templateFileSystem, FileSystem outputFileSystem, Sys.Action<Diagnostic> diagnosticConsumer )
 	{
+		Identity( diagnosticConsumer ); //just so that "using static MikeNakis.Kit.GlobalStatics;" does not get cleaned up.
 		this.contentFileSystem = contentFileSystem;
 		this.templateFileSystem = templateFileSystem;
 		this.outputFileSystem = outputFileSystem;
@@ -270,9 +274,9 @@ public sealed class BlasterEngine
 			return new CollectionViewModel( contentItem, siblingItems );
 		}
 
-		string htmlText = convert( markdownText, contentItem );
+		(IReadOnlyDictionary<string, string> properties, string htmlText) = convert( markdownText, contentItem );
 		htmlText = fixLinks( htmlText );
-		return new ContentViewModel( contentItem, htmlText );
+		return new ContentViewModel( contentItem, properties, htmlText );
 	}
 
 	static string fixLinks( string htmlText )
@@ -295,7 +299,7 @@ public sealed class BlasterEngine
 		return htmlDocument.DocumentNode.OuterHtml;
 	}
 
-	string convert( string markdownText, FileItem contentItem )
+	(IReadOnlyDictionary<string, string> properties, string htmlText) convert( string markdownText, FileItem contentItem )
 	{
 		Markdig.MarkdownPipeline pipeline = new Markdig.MarkdownPipelineBuilder()
 			//.UseAdvancedExtensions()
@@ -314,7 +318,38 @@ public sealed class BlasterEngine
 			.UseImageAsFigure() //this is probably only needed for rendering to html
 			.UseGenericAttributes() // Must be last as it is one parser that is modifying other parsers
 			.Build();
+
 		MarkdigSyntax.MarkdownDocument document = Markdig.Parsers.MarkdownParser.Parse( markdownText, pipeline );
+		string? yamlText = getYamlFrontMatter( document );
+		IReadOnlyDictionary<string, string> properties = getProperties( yamlText );
+
+		checkForBrokenLinks( contentItem, document );
+
+		string htmlText = Markdig.Markdown.ToHtml( document, pipeline );
+		return (properties, htmlText);
+	}
+
+	static string? getYamlFrontMatter( MarkdigSyntax.MarkdownDocument markdownDocument )
+	{
+		MarkdigYaml.YamlFrontMatterBlock? yamlBlock = markdownDocument.Descendants<MarkdigYaml.YamlFrontMatterBlock>().FirstOrDefault();
+		if( yamlBlock == null )
+			return null;
+		return yamlBlock.Lines.ToString(); //.Substring( yamlBlock.Span.Start, yamlBlock.Span.Length );
+	}
+
+	IReadOnlyDictionary<string, string> getProperties( string? yamlText )
+	{
+		if( yamlText == null )
+			return new Dictionary<string, string>();
+		var serializer = new SharpYaml.Serialization.Serializer();
+		var yamlTree = (Dictionary<object, object>?)serializer.Deserialize( new SysIo.StringReader( yamlText ) );
+		if( yamlTree == null )
+			return new Dictionary<string, string>();
+		return yamlTree.ToDictionary( pair => (string)pair.Key, pair => (string)pair.Value, Sys.StringComparer.OrdinalIgnoreCase );
+	}
+
+	void checkForBrokenLinks( FileItem contentItem, MarkdigSyntax.MarkdownDocument document )
+	{
 		IEnumerable<MarkdigSyntax.Inlines.LinkInline> links = document.Descendants() //
 			.OfType<MarkdigSyntax.Inlines.LinkInline>();
 		foreach( MarkdigSyntax.Inlines.LinkInline link in links )
@@ -336,7 +371,6 @@ public sealed class BlasterEngine
 				}
 			}
 		}
-		return Markdig.Markdown.ToHtml( document, pipeline );
 	}
 
 	//static string getOnlyText( MarkdigSyntax.MarkdownDocument document )
