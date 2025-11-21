@@ -1,6 +1,5 @@
 namespace Blaster;
 
-using Framework.Codecs;
 using static MikeNakis.Kit.GlobalStatics;
 using Sys = System;
 
@@ -13,8 +12,6 @@ readonly struct Name : Sys.IComparable<Name>, Sys.IEquatable<Name>
 	{
 		return new Name( content );
 	}
-
-	public static readonly Codec<Name> Codec = new StringRepresentationCodec<Name>( s => new Name( s ), k => k.Content );
 
 	public string Content { get; init; }
 

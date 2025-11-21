@@ -20,13 +20,13 @@ There are two kinds of markdown files: content files, and list files.
 
    - Implicit list file
 
-      This is an empty markdown file. It defines a list of markdown files, which includes all markdown files in the same
-	  directory, (excluding itself,) and all subdirectories, recursively.
+      This is a markdown file which contains nothing after the front matter. It defines a list of markdown files, which 
+	  includes all markdown files in the same directory, (excluding itself,) and all subdirectories, recursively.
 
    - Explicit list file
  
-      This is a markdown file that contains nothing but a list of links to other markdown files, with arbitrary 
-      whitespace between the links, but nothing else. It defines a list of the referenced markdown files.
+      This is a markdown file which, after the front matter, contains nothing but links to other markdown files, with 
+	  arbitrary whitespace between the links. It defines a list of referenced markdown files.
 
    A list will not become an HTML page, but a link to the list file is treated as a vector list, as opposed to a 
    singular list.  A vector list can be used as input to some control that will display a list of content items.
@@ -68,9 +68,14 @@ Additionally, you can specify a few special mappings:
 
    A list mapping defines the view to use to emit a list.
 
-
 TODO:
 
+- Functionality to implement:
+  - List of posts (possibly with pagination)
+  - Search and search results (possibly with pagination)
+  - List of post tags/categories with each post
+  - List of all categories (on the sidebar)
+  - List of all tags (tag cloud?) (on the sidebar)
 - Add minification of css, js files
 - Add embedding of small svg files
 - Research the "integrity" attribute of `<script>` and possibly implement it

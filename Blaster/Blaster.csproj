@@ -11,16 +11,41 @@
 	<Import Project="..\AllProjects.proj.xml" />
 	<Import Project="..\BannedApiAnalyzers.proj.xml" />
 
+	<!-- PEARL: Dotnet does not support swapping between package and project dependencies. The following nonsense is
+	            necessary to work around this limitation. See https://github.com/dotnet/project-system/issues/195 -->
+	<Choose>
+		<When Condition="Exists('..\..\MikeNakis.Kit\MikeNakis.Kit\MikeNakis.Kit.csproj')">
+			<ItemGroup>
+				<ProjectReference Include="..\..\MikeNakis.Kit\MikeNakis.Kit\MikeNakis.Kit.csproj" />
+			</ItemGroup>
+		</When>
+		<Otherwise>
+			<ItemGroup>
+				<PackageReference Include="MikeNakis.Kit-$(PackagesConfiguration)" Version="5.1.*" PrivateAssests="All" />
+			</ItemGroup>
+		</Otherwise>
+	</Choose>
+
+	<!-- PEARL: Dotnet does not support swapping between package and project dependencies. The following nonsense is
+	            necessary to work around this limitation. See https://github.com/dotnet/project-system/issues/195 -->
+	<Choose>
+		<When Condition="Exists('..\..\MikeNakis.Clio\MikeNakis.Clio\MikeNakis.Clio.csproj')">
+			<ItemGroup>
+				<ProjectReference Include="..\..\MikeNakis.Clio\MikeNakis.Clio\MikeNakis.Clio.csproj" />
+			</ItemGroup>
+		</When>
+		<Otherwise>
+			<ItemGroup>
+				<PackageReference Include="MikeNakis.Clio-$(PackagesConfiguration)" Version="5.0.*" PrivateAssests="All" />
+			</ItemGroup>
+		</Otherwise>
+	</Choose>
+
 	<ItemGroup>
-		<ProjectReference Include="..\..\MikeNakis.Kit\MikeNakis.Kit\MikeNakis.Kit.csproj" />
-		<ProjectReference Include="..\..\Solution\Framework\Framework.csproj" />
-		<ProjectReference Include="..\..\Solution\Structured.Json\Structured.Json.csproj" />
-		<ProjectReference Include="..\..\Solution\Structured\Structured.csproj" />
 		<PackageReference Include="HtmlAgilityPack" Version="1.12.4" />
 		<PackageReference Include="Markdig" Version="0.43.0" />	
 		<PackageReference Include="MarkdigExtensions.UrlRewriter" Version="1.0.0" />
 		<PackageReference Include="MarkdigExtensions.ImageAsFigure" Version="1.0.0" />		
-		<PackageReference Include="MikeNakis.Clio-$(PackagesConfiguration)" Version="5.0.36" />
 		<PackageReference Include="SharpYaml" Version="2.1.4" />
 	</ItemGroup>
 

@@ -1,6 +1,5 @@
 namespace Blaster;
 
-using Framework.Codecs;
 using MikeNakis.Kit.Extensions;
 using static MikeNakis.Kit.GlobalStatics;
 using Sys = System;
@@ -14,8 +13,6 @@ public readonly struct DirectoryName : Sys.IComparable<DirectoryName>, Sys.IEqua
 	{
 		return new DirectoryName( content );
 	}
-
-	public static readonly Codec<DirectoryName> Codec = new StringRepresentationCodec<DirectoryName>( s => new DirectoryName( s ), k => k.Content );
 
 	public string Content { get; }
 

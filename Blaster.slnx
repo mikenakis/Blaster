@@ -1,0 +1,7 @@
+<Solution>
+  <Folder Name="/_Solution Items/">
+    <File Path=".editorconfig" />
+  </Folder>
+  <Project Path="Blaster/Blaster.csproj" />
+  <Project Path="Blaster Test/Blaster Test.csproj" />
+</Solution>
