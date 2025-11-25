@@ -1,6 +1,6 @@
-name: manual
+name: auto
 
-on: workflow_dispatch
+on: push
 
 jobs:
 
@@ -47,4 +47,4 @@ jobs:
         dotnet-version: 9.0.200
 
     - name: Launch the actual build script
-      run: bash build.bash Command=manual OutputType=tool ProjectName=${{ github.event.repository.name }} GitHubPackagesNuGetApiKey=${{ secrets.MY_GITHUB_TOKEN }} NuGetOrgNuGetApiKey=${{ secrets.NUGET_API_KEY }}
+      run: bash build.bash Command=auto   ProjectName=${{ github.event.repository.name }} GitHubPackagesNuGetApiKey=${{ secrets.MY_GITHUB_TOKEN }} NuGetOrgNuGetApiKey=${{ secrets.NUGET_API_KEY }}
