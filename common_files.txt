@@ -13,4 +13,3 @@ definitions.bash
 get_version.bash
 ProductionCode.globalconfig
 TestCode.globalconfig
-release.bash
