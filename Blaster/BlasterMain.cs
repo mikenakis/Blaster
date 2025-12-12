@@ -3,7 +3,6 @@ namespace Blaster;
 using MikeNakis.Clio.Extensions;
 using MikeNakis.Kit;
 using MikeNakis.Kit.FileSystem;
-using MikeNakis.Testing;
 using Clio = MikeNakis.Clio;
 using Sys = System;
 
