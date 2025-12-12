@@ -112,9 +112,9 @@ public class T101_BlasterTests : TestClass
 	public void T103_Complex_Template_Works()
 	{
 		DirectoryPath testFilesDirectoryPath = getTestDirectory().Directory( "test-files" );
-		FileSystem sourceFileSystem = new HybridFileSystem( /*fakeClock,*/ testFilesDirectoryPath.Directory( "content" ) );
-		FileSystem templateFileSystem = new HybridFileSystem( /*fakeClock,*/ testFilesDirectoryPath.Directory( "template" ) );
-		FileSystem outputFileSystem = new HybridFileSystem( /*fakeClock,*/ testFilesDirectoryPath.Directory( "output" ) );
+		FileSystem sourceFileSystem = new HybridFileSystem( testFilesDirectoryPath.Directory( "content" ), fakeClock );
+		FileSystem templateFileSystem = new HybridFileSystem( testFilesDirectoryPath.Directory( "template" ), fakeClock );
+		FileSystem outputFileSystem = new HybridFileSystem( testFilesDirectoryPath.Directory( "output" ), fakeClock );
 
 		BlasterEngine.Run( sourceFileSystem, templateFileSystem, outputFileSystem, diagnosticConsumer );
 

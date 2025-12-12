@@ -3,6 +3,7 @@ namespace Blaster;
 using MikeNakis.Clio.Extensions;
 using MikeNakis.Kit;
 using MikeNakis.Kit.FileSystem;
+using MikeNakis.Testing;
 using Clio = MikeNakis.Clio;
 using Sys = System;
 
@@ -28,12 +29,13 @@ public sealed class BlasterMain
 			Sys.Console.WriteLine( $"INFO: Template: {templateDirectoryPath}" );
 			Sys.Console.WriteLine( $"INFO: Output: {outputDirectoryPath}" );
 
-			HybridFileSystem contentFileSystem = new HybridFileSystem( contentDirectoryPath );
-			contentFileSystem.AddFakeItem( FileName.Absolute( "index.md" ), DotNetClock.Instance.GetUniversalTime(), "[Pages](page/)\r\n\r\n[Posts](post/)" );
-			contentFileSystem.AddFakeItem( FileName.Absolute( "post/index.md" ), DotNetClock.Instance.GetUniversalTime(), "" );
-			contentFileSystem.AddFakeItem( FileName.Absolute( "page/index.md" ), DotNetClock.Instance.GetUniversalTime(), "" );
-			FileSystem templateFileSystem = new HybridFileSystem( templateDirectoryPath );
-			FileSystem outputFileSystem = new HybridFileSystem( outputDirectoryPath );
+			FakeClock fakeClock = new();
+			HybridFileSystem contentFileSystem = new HybridFileSystem( contentDirectoryPath, fakeClock );
+			contentFileSystem.AddFakeItem( FileName.Absolute( "index.md" ), "[Pages](page/)\r\n\r\n[Posts](post/)" );
+			contentFileSystem.AddFakeItem( FileName.Absolute( "post/index.md" ), "" );
+			contentFileSystem.AddFakeItem( FileName.Absolute( "page/index.md" ), "" );
+			FileSystem templateFileSystem = new HybridFileSystem( templateDirectoryPath, fakeClock );
+			FileSystem outputFileSystem = new HybridFileSystem( outputDirectoryPath, fakeClock );
 
 			BlasterEngine.Run( contentFileSystem, templateFileSystem, outputFileSystem, BlasterEngine.DefaultDiagnosticConsumer );
 

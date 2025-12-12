@@ -80,10 +80,12 @@ public sealed class HybridFileSystem : FileSystem
 
 	public DirectoryPath Root { get; }
 	readonly Dictionary<FileName, MyFileItem> items = new();
+	readonly Clock clock;
 
-	public HybridFileSystem( DirectoryPath root )
+	public HybridFileSystem( DirectoryPath root, Clock clock )
 	{
 		Root = root;
+		this.clock = clock;
 		foreach( FilePath filePath in Root.EnumerateFiles( "*", true ) )
 		{
 			if( filePath.GetFileNameAndExtension().StartsWith2( "." ) )
@@ -102,9 +104,9 @@ public sealed class HybridFileSystem : FileSystem
 		}
 	}
 
-	public FileItem AddFakeItem( FileName fileName, Sys.DateTime dateTime, string content )
+	public FileItem AddFakeItem( FileName fileName, string content )
 	{
-		MyFakeFileItem item = new MyFakeFileItem( this, fileName, dateTime, DotNetHelpers.BomlessUtf8.GetBytes( content ) );
+		MyFakeFileItem item = new MyFakeFileItem( this, fileName, clock.GetUniversalTime(), DotNetHelpers.BomlessUtf8.GetBytes( content ) );
 		items.Add( fileName, item );
 		return item;
 	}
