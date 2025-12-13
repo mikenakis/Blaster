@@ -114,7 +114,7 @@ public class T101_BlasterTests : TestClass
 		DirectoryPath testFilesDirectoryPath = getTestDirectory().Directory( "test-files" );
 		FileSystem sourceFileSystem = new HybridFileSystem( testFilesDirectoryPath.Directory( "content" ), fakeClock );
 		FileSystem templateFileSystem = new HybridFileSystem( testFilesDirectoryPath.Directory( "template" ), fakeClock );
-		FileSystem outputFileSystem = new HybridFileSystem( testFilesDirectoryPath.Directory( "output" ), fakeClock );
+		FileSystem outputFileSystem = new HybridFileSystem( testFilesDirectoryPath.Directory( "website" ), fakeClock );
 
 		BlasterEngine.Run( sourceFileSystem, templateFileSystem, outputFileSystem, diagnosticConsumer );
 

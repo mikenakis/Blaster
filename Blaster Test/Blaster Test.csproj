@@ -12,9 +12,9 @@
 	<!-- PEARL: Dotnet does not support swapping between package and project dependencies. The following nonsense is
 	            necessary to work around this limitation. See https://github.com/dotnet/project-system/issues/195 -->
 	<Choose>
-		<When Condition="Exists('..\..\MikeNakis.Kit\MikeNakis.Kit\MikeNakis.Kit.csproj')">
+		<When Condition="Exists('$(MSBuildProjectDirectory)\..\..\MikeNakis.Kit\MikeNakis.Kit\MikeNakis.Kit.csproj')">
 			<ItemGroup>
-				<ProjectReference Include="..\..\MikeNakis.Kit\MikeNakis.Kit\MikeNakis.Kit.csproj" />
+				<ProjectReference Include="$(MSBuildProjectDirectory)\..\..\MikeNakis.Kit\MikeNakis.Kit\MikeNakis.Kit.csproj" />
 			</ItemGroup>
 		</When>
 		<Otherwise>
@@ -27,9 +27,9 @@
 	<!-- PEARL: Dotnet does not support swapping between package and project dependencies. The following nonsense is
 	            necessary to work around this limitation. See https://github.com/dotnet/project-system/issues/195 -->
 	<Choose>
-		<When Condition="Exists('..\..\MikeNakis.Testing\MikeNakis.Testing\MikeNakis.Testing.csproj')">
+		<When Condition="Exists('$(MSBuildProjectDirectory)\..\..\MikeNakis.Testing\MikeNakis.Testing\MikeNakis.Testing.csproj')">
 			<ItemGroup>
-				<ProjectReference Include="..\..\MikeNakis.Testing\MikeNakis.Testing\MikeNakis.Testing.csproj" />
+				<ProjectReference Include="$(MSBuildProjectDirectory)\..\..\MikeNakis.Testing\MikeNakis.Testing\MikeNakis.Testing.csproj" />
 			</ItemGroup>
 		</When>
 		<Otherwise>

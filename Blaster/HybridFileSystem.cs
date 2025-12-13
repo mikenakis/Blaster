@@ -27,21 +27,19 @@ public sealed class HybridFileSystem : FileSystem
 	sealed class MyActualFileItem : MyFileItem
 	{
 		readonly Sys.DateTime dateTime;
-		readonly byte[] content;
 		FilePath filePath => FileSystem.getFilePath( FileName );
 
-		public MyActualFileItem( HybridFileSystem fileSystem, FileName fileName, Sys.DateTime dateTime, byte[] content )
+		public MyActualFileItem( HybridFileSystem fileSystem, FileName fileName, Sys.DateTime dateTime )
 			: base( fileSystem, fileName )
 		{
 			this.dateTime = dateTime;
-			this.content = content;
 		}
 
 		public Sys.DateTime GetTimeModified() => dateTime;
 		public override byte[] ReadAllBytes() => filePath.ReadAllBytes();
 		public override void WriteAllBytes( byte[] bytes ) => filePath.WriteAllBytes( bytes );
 		public override string GetDiagnosticPathName() => filePath.Path;
-		public override long FileLength => content.Length;
+		public override long FileLength => filePath.GetFileLength();
 	}
 
 	sealed class MyFakeFileItem : MyFileItem
@@ -95,11 +93,12 @@ public sealed class HybridFileSystem : FileSystem
 			FileName fileName = FileName.Absolute( normalize( '/' + Root.GetRelativePath( filePath ) ) );
 			createItem( fileName );
 		}
+		return;
 
 		void createItem( FileName fileName )
 		{
 			FilePath filePath = getFilePath( fileName );
-			MyActualFileItem item = new MyActualFileItem( this, fileName, filePath.CreationTimeUtc, filePath.ReadAllBytes() );
+			MyActualFileItem item = new MyActualFileItem( this, fileName, filePath.CreationTimeUtc );
 			items.Add( fileName, item );
 		}
 	}
@@ -128,9 +127,10 @@ public sealed class HybridFileSystem : FileSystem
 	public override FileItem CreateItem( FileName fileName )
 	{
 		FilePath filePath = getFilePath( fileName );
+		filePath.Directory.CreateIfNotExist();
 		using( filePath.CreateBinary() )
 		{
-			MyActualFileItem item = new MyActualFileItem( this, fileName, filePath.CreationTimeUtc, Sys.Array.Empty<byte>() );
+			MyActualFileItem item = new MyActualFileItem( this, fileName, filePath.CreationTimeUtc );
 			items.Add( fileName, item );
 			return item;
 		}
