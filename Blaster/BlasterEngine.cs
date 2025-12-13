@@ -27,23 +27,23 @@ public sealed class BlasterEngine
 			Log.Info( line );
 	};
 
-	public static void Run( FileSystem contentFileSystem, FileSystem templateFileSystem, FileSystem outputFileSystem, Sys.Action<Diagnostic> diagnosticConsumer )
+	public static void Run( FileSystem contentFileSystem, FileSystem templateFileSystem, FileSystem websiteFileSystem, Sys.Action<Diagnostic> diagnosticConsumer )
 	{
-		BlasterEngine blasterEngine = new( contentFileSystem, templateFileSystem, outputFileSystem, diagnosticConsumer );
+		BlasterEngine blasterEngine = new( contentFileSystem, templateFileSystem, websiteFileSystem, diagnosticConsumer );
 		blasterEngine.Run();
 	}
 
 	readonly FileSystem contentFileSystem;
 	readonly FileSystem templateFileSystem;
-	readonly FileSystem outputFileSystem;
+	readonly FileSystem websiteFileSystem;
 	readonly Sys.Action<Diagnostic> diagnosticConsumer;
 
-	BlasterEngine( FileSystem contentFileSystem, FileSystem templateFileSystem, FileSystem outputFileSystem, Sys.Action<Diagnostic> diagnosticConsumer )
+	BlasterEngine( FileSystem contentFileSystem, FileSystem templateFileSystem, FileSystem websiteFileSystem, Sys.Action<Diagnostic> diagnosticConsumer )
 	{
 		Identity( diagnosticConsumer ); //just so that "using static MikeNakis.Kit.GlobalStatics;" does not get cleaned up.
 		this.contentFileSystem = contentFileSystem;
 		this.templateFileSystem = templateFileSystem;
-		this.outputFileSystem = outputFileSystem;
+		this.websiteFileSystem = websiteFileSystem;
 		this.diagnosticConsumer = diagnosticConsumer;
 	}
 
@@ -54,7 +54,7 @@ public sealed class BlasterEngine
 
 	public void Run()
 	{
-		outputFileSystem.Clear();
+		websiteFileSystem.Clear();
 		List<View> topLevelViews = collectTopLevelViews();
 		generateHtmlFiles( topLevelViews );
 	}
@@ -71,7 +71,7 @@ public sealed class BlasterEngine
 				topLevelViews.Add( topLevelView );
 			}
 			else
-				outputFileSystem.CopyFrom( templateItem );
+				websiteFileSystem.CopyFrom( templateItem );
 		}
 
 		foreach( View topLevelView in topLevelViews )
@@ -152,7 +152,7 @@ public sealed class BlasterEngine
 			if( contentItem.FileName.Extension == ".md" )
 				htmlFromMarkdown( topLevelViews, contentItem );
 			else
-				outputFileSystem.CopyFrom( contentItem );
+				websiteFileSystem.CopyFrom( contentItem );
 		}
 	}
 
@@ -161,8 +161,8 @@ public sealed class BlasterEngine
 		ViewModel viewModel = getViewModel( contentItem );
 		View view = findView( viewModel, topLevelViews );
 		string htmlText = applyViewToViewModel( viewModel, view, topLevelViews );
-		FileItem outputItem = outputFileSystem.CreateItem( contentItem.FileName.WithReplacedExtension( ".html" ) );
-		outputItem.WriteAllText( htmlText );
+		FileItem websiteItem = websiteFileSystem.CreateItem( contentItem.FileName.WithReplacedExtension( ".html" ) );
+		websiteItem.WriteAllText( htmlText );
 	}
 
 	static readonly View noView = getNoView();
@@ -212,7 +212,7 @@ public sealed class BlasterEngine
 		}
 	}
 
-	string applyViewToViewModel( ContentBase viewModel, View view, IReadOnlyList<View> topLevelViews )
+	static string applyViewToViewModel( ContentBase viewModel, View view, IReadOnlyList<View> topLevelViews )
 	{
 		while( true )
 		{
@@ -337,7 +337,7 @@ public sealed class BlasterEngine
 		return yamlBlock.Lines.ToString(); //.Substring( yamlBlock.Span.Start, yamlBlock.Span.Length );
 	}
 
-	IReadOnlyDictionary<string, string> getProperties( string? yamlText )
+	static IReadOnlyDictionary<string, string> getProperties( string? yamlText )
 	{
 		if( yamlText == null )
 			return new Dictionary<string, string>();
@@ -345,7 +345,18 @@ public sealed class BlasterEngine
 		var yamlTree = (Dictionary<object, object>?)serializer.Deserialize( new SysIo.StringReader( yamlText ) );
 		if( yamlTree == null )
 			return new Dictionary<string, string>();
-		return yamlTree.ToDictionary( pair => (string)pair.Key, pair => (string)pair.Value, Sys.StringComparer.OrdinalIgnoreCase );
+		return yamlTree.ToDictionary( pair => (string)pair.Key, pair => stringFromYamlValue( pair.Value ), Sys.StringComparer.OrdinalIgnoreCase );
+
+		static string stringFromYamlValue( object yamlValue )
+		{
+			if( yamlValue is string stringValue )
+				return stringValue;
+			if( yamlValue is Dictionary<object, object> dictionaryValue )
+				return "...";
+			if( yamlValue is List<object> listValue )
+				return "...";
+			return yamlValue?.ToString() ?? "null";
+		}
 	}
 
 	void checkForBrokenLinks( FileItem contentItem, MarkdigSyntax.MarkdownDocument document )

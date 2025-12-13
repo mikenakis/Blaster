@@ -3,6 +3,7 @@ namespace Blaster;
 using MikeNakis.Kit.Extensions;
 using static MikeNakis.Kit.GlobalStatics;
 using Sys = System;
+using SysIo = System.IO;
 
 public readonly struct FileName : Sys.IComparable<FileName>, Sys.IEquatable<FileName>
 {
@@ -18,7 +19,7 @@ public readonly struct FileName : Sys.IComparable<FileName>, Sys.IEquatable<File
 	{
 		if( content.StartsWith2( "/" ) )
 			return new FileName( content );
-		return new FileName( directoryName.Content + content );
+		return new FileName( normalize( directoryName.Content + content ) );
 	}
 
 	public string Content { get; }
@@ -68,4 +69,17 @@ public readonly struct FileName : Sys.IComparable<FileName>, Sys.IEquatable<File
 	public FileName WithExtension( string extension ) => Absolute( Content + extension );
 	internal bool HasExtension( string extension ) => Content.EndsWith2( extension );
 	public FileName WithReplacedExtension( string extension ) => WithoutExtension.WithExtension( extension );
+
+	static string normalize( string pathname )
+	{
+#pragma warning disable RS0030 // Do not use banned APIs
+		string s = SysIo.Path.GetFullPath( pathname );
+		Assert( SysIo.Path.IsPathRooted( s ) );
+		string root = SysIo.Path.GetPathRoot( s )!;
+		Assert( root.EndsWith( '\\' ) );
+		s = s[(root.Length - 1)..];
+#pragma warning restore RS0030 // Do not use banned APIs
+		s = s.Replace( '\\', '/' );
+		return s;
+	}
 }
