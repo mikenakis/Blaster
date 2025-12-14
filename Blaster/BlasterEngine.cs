@@ -55,29 +55,29 @@ public sealed class BlasterEngine
 	public void Run()
 	{
 		websiteFileSystem.Clear();
-		List<View> topLevelViews = collectTopLevelViews();
-		generateHtmlFiles( topLevelViews );
+		List<View> views = collectViews();
+		generateHtmlFiles( views );
 	}
 
-	List<View> collectTopLevelViews()
+	List<View> collectViews()
 	{
-		List<View> topLevelViews = new();
+		List<View> views = new();
 
 		foreach( FileItem templateItem in templateFileSystem.EnumerateItems() )
 		{
 			if( templateItem.FileName.Extension == ".html" )
 			{
-				View topLevelView = extractTopLevelView( templateItem );
-				topLevelViews.Add( topLevelView );
+				View view = extractTopLevelView( templateItem );
+				views.Add( view );
 			}
 			else
 				websiteFileSystem.CopyFrom( templateItem );
 		}
 
-		foreach( View topLevelView in topLevelViews )
-			Helpers.PrintTree( topLevelView, view => view.Children, view => $"{view}", s => Log.Debug( s ) );
+		foreach( View view in views )
+			Helpers.PrintTree( view, view => view.Children, view => $"{view}", s => Log.Debug( s ) );
 
-		return topLevelViews;
+		return views;
 	}
 
 	View extractTopLevelView( FileItem templateItem )
