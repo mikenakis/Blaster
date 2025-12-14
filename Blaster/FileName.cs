@@ -1,5 +1,6 @@
 namespace Blaster;
 
+using MikeNakis.Kit;
 using MikeNakis.Kit.Extensions;
 using static MikeNakis.Kit.GlobalStatics;
 using Sys = System;
@@ -73,13 +74,13 @@ public readonly struct FileName : Sys.IComparable<FileName>, Sys.IEquatable<File
 	static string normalize( string pathname )
 	{
 #pragma warning disable RS0030 // Do not use banned APIs
-		string s = SysIo.Path.GetFullPath( pathname );
-		Assert( SysIo.Path.IsPathRooted( s ) );
-		string root = SysIo.Path.GetPathRoot( s )!;
-		Assert( root.EndsWith( '\\' ) );
-		s = s[(root.Length - 1)..];
+		string path = SysIo.Path.GetFullPath( pathname );
+		Assert( SysIo.Path.IsPathRooted( path ) );
+		string root = SysIo.Path.GetPathRoot( path )!; //Note: under linux, this returns '/'
+		Assert( root.EndsWith( '\\' ) || root.EndsWith( '/' ), () => new AssertionFailureException( $"path = '{path}'; root = '{root}'" ) );
+		path = path[(root.Length - 1)..];
 #pragma warning restore RS0030 // Do not use banned APIs
-		s = s.Replace( '\\', '/' );
-		return s;
+		path = path.Replace( '\\', '/' );
+		return path;
 	}
 }
