@@ -107,7 +107,7 @@ public sealed class BlasterEngine
 			if( htmlNode.Name == Constants.ContentViewTagName )
 			{
 				RegEx.Regex appliesTo = getAppliesTo( htmlNode );
-				Name name = Name.Of( $"{namePrefix} / {appliesTo}" );
+				Name name = Name.Of( htmlNode.GetAttributeValue( "name", $"{namePrefix}/applies-to:{appliesTo}" ) );
 				ImmutableArray<View> childViews = extractChildViews( name.Content, htmlNode, templateItem );
 				htmlNode.Remove();
 				View childView = new ContentView( name, appliesTo, childViews, htmlNode.InnerHtml );
@@ -116,7 +116,7 @@ public sealed class BlasterEngine
 			else if( htmlNode.Name == Constants.CollectionViewTagName )
 			{
 				RegEx.Regex appliesTo = getAppliesTo( htmlNode );
-				Name name = Name.Of( $"{namePrefix} / {appliesTo}" );
+				Name name = Name.Of( htmlNode.GetAttributeValue( "name", $"{namePrefix}/applies-to:{appliesTo}" ) );
 				ImmutableArray<View> childViews = extractChildViews( name.Content, htmlNode, templateItem );
 				Name elementViewName = getElementViewName( htmlNode, templateItem );
 				htmlNode.Remove();
@@ -133,8 +133,7 @@ public sealed class BlasterEngine
 
 		static RegEx.Regex getAppliesTo( Html.HtmlNode htmlNode )
 		{
-			Html.HtmlAttribute? appliesToAttribute = htmlNode.Attributes.AttributesWithName( Constants.AppliesToAttributeName ).SingleOrDefault();
-			string pattern = appliesToAttribute?.Value ?? "*";
+			string pattern = htmlNode.GetAttributeValue( Constants.AppliesToAttributeName, "*" );
 			if( pattern.StartsWith2( "*." ) )
 				pattern = ".*\\." + pattern[2..];
 			else if( pattern.StartsWith2( "*" ) )
