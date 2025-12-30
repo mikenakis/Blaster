@@ -4,73 +4,107 @@
 
 <img src="logo.svg" width="200em" style="display: block; margin: 0 auto;"/>
 
-You specify a directory with markdown files.  One of the files should be called index.md (configurable) and it is 
-known as the root.
+Blaster is a static website generator for markdown content.
 
-There are two kinds of markdown files: content files, and list files.
+## The directories
 
-1. Content file
+Blaster operates on three directories:
 
-   This is any markdown file with content that does not fit the description of implicit or explicit lists. (See below.)
-   It stands for content that will become a separate HTML page.
+- **The content directory**
 
-1. List file
+  Contains markdown files and associated media files.
 
-   List files come in two flavors: implicit and explicit.
+  At the root of the content directory there must be a markdown file called `index.md`. This is known as the content root. All content files must be reachable from the root either via markdown references or via implicit lists (see below.) Blaster will issue a warning for each content file that cannot be reached from the root.
+  
+  Each content file is identified by its content-file-pathname, which is normalized (contains no dot-directories) rooted (begins with a slash) and relative to the root of the content directory.
 
-   - Implicit list file
+  The content directory is treated as read-only by Blaster.
+  
+- **The template directory**
+  
+  Contains the html template and associated media files. The html template must be a single html file called   `template.html`. This html file defines the root template and contains sub-templates.
 
-      This is a markdown file which contains nothing after the front matter. It defines a list of markdown files, which 
-	  includes all markdown files in the same directory, (excluding itself,) and all subdirectories, recursively.
+  The template directory is treated as read-only by Blaster.
+  
+- **The website directory**
 
-   - Explicit list file
+  This is where Blaster generates html files and copies media files. 
+  
+  After the initial generation of html files, blaster can keep running in 'watcher' mode. In this mode, blaster will  keep listening for changes in the content and template directories, and when any file gets modified, blaster will  update any and all files in that need updating in the website directory.
+
+  The website directory is treated as read-write by Blaster.
+
+## More about markdown files
+
+There are two kinds of markdown files:
+  
+  1. **Document files**. A document file is any markdown file that does not fit the description of a list. (See below.)  It will become a separate HTML page in the generated website.
+  
+  1. **List files**. A list file is a markdown file that defines a list of content files. A list file will not become an HTML page; however, a markdown reference to a list file will be rendered inside a html file using a special kind of template known as a "list view"; more on that below.
+
+  The root markdown file can be either a document file or a list file.
+
+## More about lists
+
+A list can be defined in one of two ways:
+
+ - Explicit list file
  
-      This is a markdown file which, after the front matter, contains nothing but links to other markdown files, with 
-	  arbitrary whitespace between the links. It defines a list of referenced markdown files.
+   This is a markdown file which contains nothing but markdown references to other content files after the front matter. (Whitespace and comments are ignored.) This file defines a list of explicitly referenced files. The referenced files can reside anywhere within the content directory.
 
-   A list will not become an HTML page, but a link to the list file is treated as a vector list, as opposed to a 
-   singular list.  A vector list can be used as input to some control that will display a list of content items.
+ - Implicit list file
 
-All markdown files must be reachable from the root. If any markdown files cannot be reached from the root, (either
-implicitly or explicitly,) Blaster will issue a warning for each of them.
+   This is a markdown file which contains nothing after the front matter. (Whitespace and comments are ignored.) It defines a list comprising all content files (except itself) whose content-file-pathnames match a certain pattern (configured via front-matter) and reside in the same directory and optionally (also configured via front-matter) all subdirectories recursively.
 
-Content files and lists are addressable using identifiers.
+## Markdown references
 
-- The identifier of a content file is the relative path from the root to the file, including the filename but excluding 
-the .md extension.
+A reference in markdown can be either external or internal.
 
-- The identifier of a list is the relative path from the root to the list file.
+- An external markdown reference is any markdown reference that begins with a protocol, such as `http://` or `https://`. Such a reference points to a resource outside the content directory.
 
-In the root you must specify a mapping file which maps views (html sections) to identifiers. The mapping is done using a
-regular expression for the identifier, so that all identifiers under a certain directory can be mapped to the same view. 
+- An internal markdown reference is any markdown reference that does not begin with a protocol, and therefore points to a file within the content directory.
+ 
+An internal markdown reference must be specified as being relative to the markdown file that contains it, but this is only due to limitations of existing tooling, such as Obsidian. We might introduce an additional convention where absolute references (starting with a slash) are also valid, and they are treated as relative to the root of the content directory. In any case, blaster will always convert an internal markdown reference to a content-file-pathname by performing the following operations:
 
-Additionally, you can specify a few special mappings: 
+  - convert it from relative to absolute by prepending to it the location of the containing markdown file
+  - normalize it (remove dot-directories)
+  - convert it again from absolute to relative with respect to the root of the content directory
+  - prepend a slash
 
-1. Image mappings
+Blaster will always generate an error if an internal reference targets a file that does not exist.
 
-   An image mapping defines the view to use to emit `<img>` elements. If not specified, a plain `<img ...>` tag is
-   emitted.
+## Mappings
 
-1. Link mappings
+Each view specifies a set of mappings. A mapping specifies which sub-view should be used to render into html a certain kind of content.
 
-   A link mapping defines the view to use to emit `<a>` elements. If not specified, a plain `<a...>` tag is emitted. 
-   There are a couple of variants:
+A mapping uses a regular expression to match content-file-pathnames, so that many content files can be mapped to the same view.
 
-   - Internal link mappings
-	
-	 An internal link mapping defines the view to use to emit relative URLs. (Links pointing to content files within the site.)
+There are a few different kinds of mappings: 
 
-   - External link mapping
+1. External reference mapping
 
-     An external link mapping defines the view to use to emit absolute URLs to resources outside of the site.
+   Specifies the view to use to emit html for external references. If not specified, the default external reference view will emit an `<a...>` tag that opens the referenced external resource in a new browser tab or window. The mapping uses a regular expression to select which references to apply to; this allows us to define different views for different types of external resources, such as document files, image files, video files, audio files, etc.
 
-1. List mappings
+1. Internal document reference mapping
 
-   A list mapping defines the view to use to emit a list.
+   Specifies the view to use to emit an internal reference to a markdown file. If not specified, the default internal document reference view will emit an `<a...>` tag.
 
-TODO:
+1. Internal media reference mapping
 
-- Functionality to implement:
+   Specifies the view to use to emit html for an internal reference to a non-markdown (non-document and non-list) file. A few internal media reference views are predefined, for example one which matches all common image media types and emits an `<img ...>` tag, and one which matches all other media types and emits an `<a ...>` tag.
+
+1. List mapping
+
+   Specifies the view to use to emit html for an internal reference to a list file. If not defined, the default list view is used. The default list view simply emits a list of `<a...>` tags.
+
+## Views
+
+The easiest way to define a view is via an html template.
+
+## TODO:
+
+- Plugins (additional views)
+- Functionality that must somehow be achievable:
   - List of posts (possibly with pagination)
   - Search and search results (possibly with pagination)
   - List of post tags/categories with each post
@@ -81,7 +115,7 @@ TODO:
 - Research the "integrity" attribute of `<script>` and possibly implement it
 - Research the "srcset" attribute of `<img>` and possibly implement it
 
-IDEAS:
+## IDEAS:
 
 - Introduce a `<content>` element in template html, to contain all child templates. When this element gets extracted from the template, it gets replaced with `{{content}}`, so that once the resolved child template has been applied, we know exactly where to paste the result. Also, the html inside this element and between the child templates gets completely stripped away, so the web designer can place some design-time-only html there to better organize the child templates.
 
