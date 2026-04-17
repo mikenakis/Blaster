@@ -2,6 +2,7 @@
 
 	<PropertyGroup>
 		<TargetFramework>net9.0</TargetFramework>
+		<LangVersion>13</LangVersion>
 		<IsTestProject>True</IsTestProject>
 		<Configurations>Debug</Configurations>
 	</PropertyGroup>
