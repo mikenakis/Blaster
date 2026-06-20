@@ -5,7 +5,6 @@ using System.Collections.Immutable;
 using System.Linq;
 using MarkdigExtensions;
 using MikeNakis.Kit;
-using MikeNakis.Kit.Collections;
 using MikeNakis.Kit.Extensions;
 using static Markdig.MarkdownExtensions;
 using static Markdig.Syntax.MarkdownObjectExtensions;
