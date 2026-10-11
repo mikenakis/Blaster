@@ -93,7 +93,7 @@ public sealed class TemplateEngine
 	readonly ImmutableArray<int> lengths;
 	readonly ImmutableArray<Field> fields;
 	public int Length { get; }
-	public IEnumerable<string> FieldNames => fields.Select( field => field.Name );
+	public IEnumerable<string> FieldNames => fields.Select( f => f.Name );
 
 	TemplateEngine( string text, ImmutableArray<int> lengths, ImmutableArray<Field> fields )
 	{
