@@ -1,3 +1,18 @@
 #!/bin/bash
-declare -r here=$(dirname $(realpath --relative-to="$PWD" "$0"))
-bash $here/../MikeNakis.CommonFiles/copy_files_for_project.bash --target-directory=$here
+
+# [Claude] Keep the whole script inside a block that ends with `exit`, because the copy that this script starts may
+#    replace this very file while bash is executing it.
+# [Claude] Bash reads a block in full before executing it, and the `exit` keeps bash from reading the file any further.
+{
+
+set -o errexit -o nounset -o pipefail
+
+declare my_directory
+my_directory=$(realpath --relative-to="$PWD" "$0")
+my_directory=$(dirname "$my_directory")
+declare -r my_directory
+
+bash $my_directory/../MikeNakis.CommonFiles/copy_files_for_project.bash --target-directory=$my_directory
+
+exit
+}
