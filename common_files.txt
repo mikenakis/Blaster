@@ -14,3 +14,4 @@ get_common_files.bash
 get_version.bash
 ProductionCode.globalconfig
 TestCode.globalconfig
+dotnet-tools.json .config/dotnet-tools.json

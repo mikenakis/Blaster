@@ -2,7 +2,7 @@
 
 ## A static website generator for markdown<br>(because Hugo is a monstrosity)
 
-<img src="logo.svg" width="200em" style="display: block; margin: 0 auto;"/>
+<img src="Blaster/Blaster-icon.svg" width="200em" style="display: block; margin: 0 auto;"/>
 
 Blaster is a static website generator for markdown content.
 
